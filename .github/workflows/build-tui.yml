@@ -1,0 +1,85 @@
+name: Build Scanner TUI
+
+# Builds the standalone scanner TUI executable for Windows and Linux.
+#
+# - Push a tag like "v0.1.0" -> builds both, then attaches them to a GitHub
+#   Release named after the tag (a stable, permanent download link).
+# - "Run workflow" from the Actions tab (workflow_dispatch) -> builds both
+#   and uploads them as run artifacts only, no release (good for one-off
+#   test builds you don't want cluttering the Releases page).
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            built_name: TradingScanner.exe
+            asset_name: TradingScanner-windows.exe
+            data_sep: ";"
+          - os: ubuntu-latest
+            built_name: TradingScanner
+            asset_name: TradingScanner-linux
+            data_sep: ":"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pyinstaller
+
+      - name: Build executable
+        shell: bash
+        run: >
+          pyinstaller --onefile --console --name TradingScanner
+          --add-data "tradingagents/tui/theme.tcss${{ matrix.data_sep }}tradingagents/tui"
+          --collect-all textual --collect-all yfinance --collect-all ccxt
+          scanner_tui.py
+
+      - name: Stage artifact
+        shell: bash
+        run: |
+          mkdir -p out
+          cp "dist/${{ matrix.built_name }}" "out/${{ matrix.asset_name }}"
+          chmod +x "out/${{ matrix.asset_name }}" || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: out/${{ matrix.asset_name }}
+          retention-days: 30
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Flatten artifacts into one folder
+        run: |
+          mkdir -p release
+          find artifacts -type f -exec cp {} release/ \;
+          ls -la release
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true
