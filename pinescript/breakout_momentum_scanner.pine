@@ -1,0 +1,181 @@
+//@version=6
+// Breakout Momentum Scanner
+//
+// Mirrors tradingagents/scanner/breakout.py, so the chart shows the same
+// logic the Python scanner ranks symbols with.
+//
+// Flags a LONG candidate on bar close when ALL of hold:
+//   - close breaks the prior `lookback`-bar high
+//   - closes in the upper 60% of its own candle range (strong close, not a
+//     long-wick spike already reversing)
+//   - volume >= volMultiplier x the trailing average (real participation)
+//   - single-candle % change <= maxCandleChangePct (excludes an already
+//     vertical, already-blown-off candle -- the shape a "signal" group posts
+//     on top of after the fact, not the start of a move)
+//   - RSI AS OF THE PRIOR BAR is within [rsiFloor, rsiCeiling] -- rules out a
+//     move that was already in blow-off territory before this candle even
+//     printed. Deliberately not RSI on the breakout bar itself: RSI spikes
+//     toward 100 mechanically on the first directional candle after any
+//     tight compression, which would flag the healthiest setups as
+//     "overbought" for the wrong reason.
+//
+// BO vs BO+squeeze: both satisfy every hard gate above -- the difference is
+// only whether the range was visibly tightening (compressing) in the 5 bars
+// right before the breakout, the textbook "coiled spring" shape. BO+squeeze
+// is the cleaner, statistically stronger setup (lime); plain BO still broke
+// out on real volume with a strong close, it just didn't coil first
+// (yellow). Neither is required -- compression is a bonus, not a filter,
+// because true squeezes are rare at any given bar and requiring one would
+// throw away most genuine breakouts.
+//
+// LIQUIDITY SWEEP (reversal signal, independent of the breakout logic above):
+// a wick pokes through a recent swing high/low -- the level where stop-losses
+// and breakout orders cluster ("liquidity") -- and the candle closes back
+// inside the range, rejecting the move. That rejection is the entry trigger:
+// it reads as the move that ran the stops being absorbed and reversed,
+// rather than genuine continuation. Pairs naturally with the EQH/EQL/BOS/
+// CHoCH labels an SMC indicator (e.g. LuxAlgo) already draws, since equal
+// highs/lows are exactly where that liquidity pools.
+//   Bullish sweep (long entry): low wicks below the prior swing low, close
+//     reclaims back above it, candle is green, and closes in the upper half
+//     of its range (a real rejection, not a weak doji poke).
+//   Bearish sweep (short / exit-long warning): the mirror image above a
+//     prior swing high.
+// This is the OPPOSITE candle shape from a breakout: a breakout wants a
+// strong close beyond the level (continuation); a sweep wants a wick beyond
+// the level that fails and reverses. Both can fire on the same symbol at
+// different times -- they are not meant to agree.
+
+indicator("Breakout Momentum Scanner", overlay = true, max_labels_count = 200)
+
+// ---- Inputs (defaults match the Python scanner's tuned values) ----
+showBreakouts      = input.bool(true, "Show breakout signals", group = "Breakout")
+lookback           = input.int(20, "Breakout lookback (bars)", minval = 5, group = "Breakout")
+compressionWindow  = input.int(20, "Compression window (bars)", minval = 5, group = "Breakout")
+volMultiplier      = input.float(2.0, "Volume multiplier", minval = 1.0, step = 0.1, group = "Breakout")
+maxCandleChangePct = input.float(12.0, "Max single-candle % change", minval = 1.0, group = "Breakout")
+rsiFloor           = input.float(40.0, "RSI floor (pre-breakout)", minval = 0, maxval = 100, group = "Breakout")
+rsiCeiling         = input.float(82.0, "RSI ceiling (pre-breakout)", minval = 0, maxval = 100, group = "Breakout")
+showStopTarget     = input.bool(true, "Show suggested stop / measured-move target", group = "Breakout")
+
+showSweeps         = input.bool(true, "Show liquidity sweep signals", group = "Liquidity sweep")
+sweepLookback      = input.int(10, "Swing high/low lookback (bars)", minval = 3, group = "Liquidity sweep")
+sweepRejectStrength = input.float(0.5, "Min reject strength (0-1)", minval = 0, maxval = 1, step = 0.05, group = "Liquidity sweep")
+sweepVolMultiplier = input.float(1.5, "Sweep volume multiplier", minval = 1.0, step = 0.1, group = "Liquidity sweep")
+sweepTargetMult    = input.float(2.0, "Target = sweep depth x this", minval = 0.5, step = 0.5, group = "Liquidity sweep")
+
+// ---- Core measurements (all computed off bar[1].. so they match "prior",
+//      excluding the live/breakout bar itself) ----
+breakoutLevel = ta.highest(high[1], lookback)
+candleRange   = high - low
+closePosition = candleRange > 0 ? (close - low) / candleRange : 0.0
+avgVolume     = ta.sma(volume[1], lookback)
+candleChangePct = (close - open) / open * 100
+
+// RSI as of the PRIOR bar -- not the breakout bar itself (see note above).
+rsiPrior = ta.rsi(close, 14)[1]
+
+trueRangePct      = (high - low) / close * 100
+baselineRange     = ta.sma(trueRangePct[1], compressionWindow)
+recentCompression = ta.sma(trueRangePct[1], 5)
+
+// v6 enforces strict booleans (no na) -- every comparison below must be
+// guarded against na operands during the indicator warm-up period, which v5
+// silently tolerated.
+volumeRatio = not na(avgVolume) and avgVolume > 0 ? volume / avgVolume : 0.0
+compressionRatio = not na(baselineRange) and baselineRange > 0 and not na(recentCompression) ? recentCompression / baselineRange : 1.0
+isCompressed = compressionRatio < 1.0
+
+// ---- Hard gates ----
+brokeOut      = not na(breakoutLevel) and close > breakoutLevel
+strongClose   = closePosition >= 0.6
+volConfirmed  = volumeRatio >= volMultiplier
+notBlownOff   = math.abs(candleChangePct) <= maxCandleChangePct
+rsiOk         = not na(rsiPrior) and rsiPrior >= rsiFloor and rsiPrior <= rsiCeiling
+
+isBreakout = brokeOut and strongClose and volConfirmed and notBlownOff and rsiOk
+
+// ---- Stop / target (measured-move off the range that was broken) ----
+atrVal   = ta.sma(high[1] - low[1], 14)
+stopLoss = breakoutLevel - 1.5 * atrVal
+rangeLow = ta.lowest(low[1], lookback)
+target   = breakoutLevel + (breakoutLevel - rangeLow)
+
+// ---- Liquidity sweep detection ----
+priorSwingLow  = ta.lowest(low[1], sweepLookback)
+priorSwingHigh = ta.highest(high[1], sweepLookback)
+sweepAvgVolume = ta.sma(volume[1], sweepLookback)
+sweepVolumeRatio = not na(sweepAvgVolume) and sweepAvgVolume > 0 ? volume / sweepAvgVolume : 0.0
+sweepVolOk = sweepVolumeRatio >= sweepVolMultiplier
+
+// Bullish: wick below the prior swing low, close reclaims back above it.
+sweptLow     = not na(priorSwingLow) and low < priorSwingLow
+reclaimedLow = not na(priorSwingLow) and close > priorSwingLow
+bullReject   = closePosition >= sweepRejectStrength
+isBullishSweep = sweptLow and reclaimedLow and close > open and bullReject and sweepVolOk
+
+// Bearish: wick above the prior swing high, close rejects back below it.
+sweptHigh     = not na(priorSwingHigh) and high > priorSwingHigh
+reclaimedHigh = not na(priorSwingHigh) and close < priorSwingHigh
+bearRejectStrength = candleRange > 0 ? (high - close) / candleRange : 0.0
+bearReject    = bearRejectStrength >= sweepRejectStrength
+isBearishSweep = sweptHigh and reclaimedHigh and close < open and bearReject and sweepVolOk
+
+sweepDepthLow  = not na(priorSwingLow) ? priorSwingLow - low : 0.0
+sweepStopLow   = low - 0.5 * atrVal
+sweepTargetLow = close + sweepDepthLow * sweepTargetMult
+
+sweepDepthHigh  = not na(priorSwingHigh) ? high - priorSwingHigh : 0.0
+sweepStopHigh   = high + 0.5 * atrVal
+sweepTargetHigh = close - sweepDepthHigh * sweepTargetMult
+
+// ---- Plotting: breakout (continuation) ----
+bgcolor(showBreakouts and isBreakout and isCompressed ? color.new(color.lime, 90) : na, title = "Compressed breakout zone")
+
+plotshape(
+    showBreakouts and isBreakout, title = "Breakout", location = location.belowbar,
+    style = shape.triangleup, size = size.small,
+    color = isCompressed ? color.lime : color.yellow
+)
+
+plot(showStopTarget and showBreakouts and isBreakout ? stopLoss : na, title = "Breakout stop", style = plot.style_circles, color = color.red, linewidth = 2)
+plot(showStopTarget and showBreakouts and isBreakout ? target : na, title = "Breakout target", style = plot.style_circles, color = color.green, linewidth = 2)
+
+if showBreakouts and isBreakout
+    label.new(
+        bar_index, low, text = isCompressed ? "BO+squeeze" : "BO",
+        style = label.style_label_up, color = isCompressed ? color.lime : color.yellow,
+        textcolor = color.black, size = size.tiny, yloc = yloc.belowbar
+    )
+
+// ---- Plotting: liquidity sweep (reversal) ----
+plotshape(
+    showSweeps and isBullishSweep, title = "Bullish sweep", location = location.belowbar,
+    style = shape.triangleup, size = size.small, color = color.aqua
+)
+plotshape(
+    showSweeps and isBearishSweep, title = "Bearish sweep", location = location.abovebar,
+    style = shape.triangledown, size = size.small, color = color.fuchsia
+)
+
+plot(showStopTarget and showSweeps and isBullishSweep ? sweepStopLow : na, title = "Bullish sweep stop", style = plot.style_circles, color = color.red, linewidth = 2)
+plot(showStopTarget and showSweeps and isBullishSweep ? sweepTargetLow : na, title = "Bullish sweep target", style = plot.style_circles, color = color.green, linewidth = 2)
+plot(showStopTarget and showSweeps and isBearishSweep ? sweepStopHigh : na, title = "Bearish sweep stop", style = plot.style_circles, color = color.red, linewidth = 2)
+plot(showStopTarget and showSweeps and isBearishSweep ? sweepTargetHigh : na, title = "Bearish sweep target", style = plot.style_circles, color = color.green, linewidth = 2)
+
+if showSweeps and isBullishSweep
+    label.new(
+        bar_index, low, text = "SWEEP",
+        style = label.style_label_up, color = color.aqua,
+        textcolor = color.black, size = size.tiny, yloc = yloc.belowbar
+    )
+if showSweeps and isBearishSweep
+    label.new(
+        bar_index, high, text = "SWEEP",
+        style = label.style_label_down, color = color.fuchsia,
+        textcolor = color.white, size = size.tiny, yloc = yloc.abovebar
+    )
+
+alertcondition(isBreakout, title = "Breakout detected", message = "{{ticker}}: breakout candle with volume + RSI confirmation (set alert to 'Only on bar close')")
+alertcondition(isBullishSweep, title = "Bullish liquidity sweep", message = "{{ticker}}: swept a prior swing low and reclaimed it (set alert to 'Only on bar close')")
+alertcondition(isBearishSweep, title = "Bearish liquidity sweep", message = "{{ticker}}: swept a prior swing high and rejected it (set alert to 'Only on bar close')")

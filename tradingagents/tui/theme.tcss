@@ -1,0 +1,261 @@
+/* Dark trading-terminal theme. Deep near-black base, amber/gold accent for
+   structure (titles, borders, active state), green/red reserved exclusively
+   for long/short so they stay meaningful instead of decorative. */
+
+Screen {
+    background: #0a0e14;
+    color: #c9d1d9;
+}
+
+Header {
+    background: #131820;
+    color: #e3b341;
+    text-style: bold;
+}
+
+Footer {
+    background: #131820;
+    color: #8b949e;
+}
+
+/* ---- Control bar ---- */
+
+#control-bar {
+    height: 5;
+    background: #10151c;
+    border-bottom: solid #262c36;
+    padding: 0 1;
+}
+
+#control-bar Label {
+    color: #8b949e;
+    padding: 1 1 0 0;
+}
+
+#control-bar Select {
+    width: 18;
+    margin-right: 2;
+}
+
+#control-bar Switch {
+    margin-right: 2;
+    margin-top: 0;
+}
+#control-bar Switch.-on > .switch--slider {
+    color: #3fb950;
+    background: #1c2a3a;
+}
+
+#control-bar Button {
+    margin-right: 2;
+    margin-top: 0;
+    min-width: 12;
+}
+
+#scan-now-btn {
+    background: #e3b341;
+    color: #0a0e14;
+    text-style: bold;
+}
+#scan-now-btn:hover {
+    background: #f0c54c;
+}
+
+#status-line {
+    color: #8b949e;
+    width: 1fr;
+    content-align: right middle;
+    padding-right: 1;
+}
+
+#status-line.scanning {
+    color: #e3b341;
+    text-style: bold italic;
+}
+
+#auto-count {
+    color: #e3b341;
+    width: auto;
+    padding: 1 2 0 0;
+}
+
+#regime-banner {
+    background: #10151c;
+    border: round #262c36;
+    color: #9ba7b4;
+    height: auto;
+    min-height: 3;
+    padding: 0 2;
+    text-style: bold;
+}
+
+#regime-banner.bullish {
+    border: round #3fb950;
+    color: #3fb950;
+}
+
+#regime-banner.bearish {
+    border: round #f85149;
+    color: #f85149;
+}
+
+/* ---- Tabs ---- */
+/* The active tab is a solid gold pill with dark text -- a color change alone
+   (the old design) reads as "slightly different text," not "this is the
+   selected one." A filled background is unambiguous at a glance. */
+
+TabbedContent {
+    background: #0a0e14;
+}
+
+Tabs {
+    background: #10151c;
+}
+
+Tab {
+    color: #9ba7b4;
+    padding: 0 2;
+    text-style: bold;
+}
+
+Tab:hover {
+    color: #f0c54c;
+}
+
+Tab.-active {
+    background: #e3b341;
+    color: #0a0e14;
+    text-style: bold;
+}
+
+Underline {
+    display: none;  /* the pill background already shows the active tab */
+}
+
+TabPane {
+    padding: 1 1;
+}
+
+/* ---- Tables ---- */
+
+DataTable {
+    background: #0a0e14;
+    border: round #262c36;
+    height: 1fr;
+    scrollbar-size-vertical: 1;
+    scrollbar-size-horizontal: 1;
+    scrollbar-color: #30363d;
+    scrollbar-color-hover: #e3b341;
+    scrollbar-color-active: #e3b341;
+    scrollbar-background: #10151c;
+}
+
+DataTable > .datatable--header {
+    background: #131820;
+    color: #e3b341;
+    text-style: bold;
+}
+
+DataTable > .datatable--cursor {
+    background: #1c2a3a;
+}
+
+DataTable > .datatable--hover {
+    background: #141b26;
+}
+
+.panel-title {
+    color: #e3b341;
+    text-style: bold;
+    padding: 0 0 1 0;
+}
+
+.panel-subtitle {
+    color: #6e7681;
+    padding: 0 0 1 0;
+}
+
+.empty-state {
+    color: #6e7681;
+    text-style: italic;
+    padding: 2;
+    content-align: center middle;
+    height: 1fr;
+}
+
+/* ---- Gold SMC card ---- */
+
+#gold-controls {
+    height: 4;
+    padding-bottom: 1;
+}
+
+#gold-controls Select {
+    width: 14;
+    margin-right: 2;
+}
+
+#gold-card {
+    border: round #262c36;
+    padding: 1 2;
+    height: auto;
+    min-height: 10;
+}
+
+#gold-card.long {
+    border: round #3fb950;
+}
+
+#gold-card.short {
+    border: round #f85149;
+}
+
+.gold-direction-long {
+    color: #3fb950;
+    text-style: bold;
+}
+
+.gold-direction-short {
+    color: #f85149;
+    text-style: bold;
+}
+
+.value-entry { color: #58a6ff; text-style: bold; }
+.value-stop { color: #f85149; text-style: bold; }
+.value-target { color: #3fb950; text-style: bold; }
+.value-dim { color: #6e7681; }
+
+/* ---- Glossary modal ---- */
+
+GlossaryScreen {
+    align: center middle;
+}
+
+#glossary-panel {
+    width: 90%;
+    height: 85%;
+    background: #10151c;
+    border: round #e3b341;
+    padding: 1 2;
+}
+
+#glossary-title {
+    color: #e3b341;
+    text-style: bold;
+    padding-bottom: 1;
+}
+
+#glossary-body {
+    height: 1fr;
+    scrollbar-size-vertical: 1;
+    scrollbar-color: #30363d;
+    scrollbar-color-hover: #e3b341;
+    scrollbar-color-active: #e3b341;
+    scrollbar-background: #10151c;
+}
+
+#glossary-close-hint {
+    color: #6e7681;
+    text-style: italic;
+    padding-top: 1;
+}
