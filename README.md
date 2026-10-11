@@ -1,122 +1,137 @@
+# Trading Scanner
+
+A multi-market trading scanner with a live terminal dashboard (breakouts, pullbacks, accumulation ranges, SMC gold sweeps, market-wide regime, news, backtesting, and paper trading), built on top of [TradingAgents](https://github.com/TauricResearch/TradingAgents) — an open-source multi-agent LLM framework for deep, narrative stock analysis. The two tools solve different problems and both ship in this repo: the Scanner tells you **what's happening right now** across hundreds of symbols; TradingAgents tells you **why**, for one symbol at a time, through a simulated team of analyst/researcher/trader agents.
+
 <p align="center">
-  <img src="assets/TauricResearch.png" style="width: 60%; height: auto;">
+  <img src="assets/scanner/paper.png" width="100%">
 </p>
 
-<div align="center" style="line-height: 1;">
-  <a href="https://arxiv.org/abs/2412.20138" target="_blank"><img alt="arXiv" src="https://img.shields.io/badge/arXiv-2412.20138-B31B1B?logo=arxiv"/></a>
-  <a href="https://discord.com/invite/hk9PGKShPK" target="_blank"><img alt="Discord" src="https://img.shields.io/badge/Discord-TradingResearch-7289da?logo=discord&logoColor=white&color=7289da"/></a>
-  <a href="https://x.com/TauricResearch" target="_blank"><img alt="X Follow" src="https://img.shields.io/badge/X-TauricResearch-white?logo=x&logoColor=white"/></a>
-  <a href="https://github.com/TauricResearch/" target="_blank"><img alt="Community" src="https://img.shields.io/badge/GitHub_Community-TauricResearch-14C290?logo=discourse"/></a>
-</div>
-<br>
+> Everything here is a research and screening tool, not financial advice. Every signal is a candidate for your own further research, not an instruction to trade. See [`tauric.ai/disclaimer`](https://tauric.ai/disclaimer/) for the standard disclaimer that applies to the TradingAgents side of this project as well.
+
 <div align="center">
-  <a href="https://github.com/TauricResearch" target="_blank"><img alt="TradingAgents #1 Repository of the Day" src="https://trendshift.io/api/badge/repositories/16192" width="250" height="55"/></a>
-</div>
-<br>
-<div align="center">
-  <!-- Keep these links. Translations will automatically update with the README. -->
-  <a href="https://www.readme-i18n.com/TauricResearch/TradingAgents?lang=de">Deutsch</a> | 
-  <a href="https://www.readme-i18n.com/TauricResearch/TradingAgents?lang=es">Español</a> | 
-  <a href="https://www.readme-i18n.com/TauricResearch/TradingAgents?lang=fr">français</a> | 
-  <a href="https://www.readme-i18n.com/TauricResearch/TradingAgents?lang=ja">日本語</a> | 
-  <a href="https://www.readme-i18n.com/TauricResearch/TradingAgents?lang=ko">한국어</a> | 
-  <a href="https://www.readme-i18n.com/TauricResearch/TradingAgents?lang=pt">Português</a> | 
-  <a href="https://www.readme-i18n.com/TauricResearch/TradingAgents?lang=ru">Русский</a> | 
-  <a href="https://www.readme-i18n.com/TauricResearch/TradingAgents?lang=zh">中文</a>
+
+📡 [Scanner & TUI](#scanner--tui) | 🤖 [TradingAgents Framework](#tradingagents-framework) | ⚡ [Installation](#installation) | 📦 [Package Usage](#python-usage) | 🤝 [Contributing](#contributing)
+
 </div>
 
 ---
 
-# TradingAgents: Multi-Agents LLM Financial Trading Framework
+## Scanner & TUI
 
-## News
-- [2026-07] **TradingAgents v0.3.1** released with correctness and stability fixes: Alpha Vantage look-ahead filtering, graph-router crash-safety, graph-shape-aware checkpoint resume, working crypto sentiment sources, a configurable LLM retry budget, Bedrock API-key auth, and Claude Sonnet 5 / Fable 5 support. See [CHANGELOG.md](CHANGELOG.md) for the full list.
-- [2026-06] **TradingAgents v0.3.0** released with a verified data-access contract, an expanded provider registry (NVIDIA, Kimi, Groq, Mistral, Bedrock, and any OpenAI-compatible endpoint), FRED and Polymarket data vendors, a current-generation model catalog, and a CI gate.
-- [2026-05] **TradingAgents v0.2.5** released with the grounded Sentiment Analyst, GPT-5.5 etc. model coverage, Qwen/GLM/MiniMax dual-region support, `TRADINGAGENTS_*` env-var configurability with API-key auto-detection, remote Ollama support, non-US alpha benchmarks, and ticker path-traversal hardening.
-- [2026-04] **TradingAgents v0.2.4** released with structured-output agents (Research Manager, Trader, Portfolio Manager), LangGraph checkpoint resume, persistent decision log, DeepSeek/Qwen/GLM/Azure provider support, Docker, and a Windows UTF-8 encoding fix.
-- [2026-03] **TradingAgents v0.2.3** released with multi-language support, GPT-5.4 family models, unified model catalog, backtesting date fidelity, and proxy support.
-- [2026-03] **TradingAgents v0.2.2** released with GPT-5.4/Gemini 3.1/Claude 4.6 model coverage, five-tier rating scale, OpenAI Responses API, Anthropic effort control, and cross-platform stability.
-- [2026-02] **TradingAgents v0.2.0** released with multi-provider LLM support (GPT-5.x, Gemini 3.x, Claude 4.x, Grok 4.x) and improved system architecture.
-- [2026-01] **Trading-R1** [Technical Report](https://arxiv.org/abs/2509.11420) released, with [Terminal](https://github.com/TauricResearch/Trading-R1) expected to land soon.
+A live dashboard, built with [Textual](https://textual.textualize.io/), that scans crypto perpetuals, Binance's tokenized stock perpetuals, and real NASDAQ/NYSE stocks (via yfinance) for a handful of well-defined technical patterns — then backtests them against real history and paper-trades every live hit against what actually happened next, so the tool's own track record is something you can check rather than take on faith.
 
-<div align="center">
+<p align="center">
+  <img src="assets/scanner/backtest.png" width="100%">
+</p>
 
-🚀 [TradingAgents](#tradingagents-framework) | ⚡ [Installation & CLI](#installation-and-cli) | 🎬 [Demo](https://www.youtube.com/watch?v=90gr5lwjIho) | 📦 [Package Usage](#tradingagents-package) | 🤝 [Contributing](#contributing) | 📄 [Citation](#citation)
+### What it looks for
 
-</div>
+Every tier is bidirectional (long **and** short, clearly separated) unless noted:
 
-> 🎉 **TradingAgents** officially released! We have received numerous inquiries about the work, and we would like to express our thanks for the enthusiasm in our community.
->
-> So we decided to fully open-source the framework. Looking forward to building impactful projects with you!
+- **Confirmed** — closed-candle, volume-confirmed breakouts/breakdowns, with entry/stop/staged TP1-TP2-TP3 targets.
+- **Approaching** — the live, still-forming candle already building toward a breakout or breakdown, before it closes.
+- **Pullback** — a retest of a level a recent breakout cleared, either holding (continuation) or failing (reversal).
+- **Accumulation** — symbols basing in a tight, quiet range, watchlist-only (not a signal by itself).
+- **Gold SMC** — a dedicated Smart Money Concepts liquidity-sweep analysis on XAU/USDT.
+- **Market regime** — a standing bullish/neutral/bearish gauge blending breadth across ~60 liquid symbols with BTC's own trend, plus whether that lean is building, fading, or flipping. Context for every other tab, not a filter.
+- **News** — crypto (CoinDesk/Cointelegraph) and stock (CNBC) headlines via public RSS, no API key, with a forex-factory-style HIGH/MEDIUM/LOW impact heuristic and a click-to-expand detail popup.
+
+Every tier is a technical screener, not a predictor: it flags candidates that match a specific, documented pattern for you to research further, and says so in its own output. Press `g` in the TUI (or `--glossary` on the CLI) for a full plain-English explanation of every term it prints — RSI, ATR, score, R-multiple, and the rest.
+
+### Does it actually work? (Backtest + Paper trading)
+
+<p align="center">
+  <img src="assets/scanner/news.png" width="100%">
+</p>
+
+- **Backtest tab** — replays the Breakout/Pullback detectors bar-by-bar over real paginated history for any symbol, using only data that would have been available at each point in time. Reuses the exact live detection code, so a backtest result means "this is what the live scanner would have shown," not a separate simulated version of the logic.
+- **Paper tab** — logs every live `Confirmed` hit automatically and tracks it against real subsequent price action: a win stays open past TP1 to chase TP2/TP3, closing only once it reaches the final target or falls back through its original stop. Configurable margin and leverage (`s` for Settings) scale the $ P&L column only — never the R-multiple, which is what actually answers "does this detector have edge," independent of position size. This is the honest, slow answer to "does the system know if its own signals are right": not a one-off backtest, a ledger that keeps accumulating real outcomes the longer it runs. A handful of trades tells you almost nothing — treat the win rate as noise until it has weeks of real volume behind it, ideally spanning both a bullish and a bearish stretch.
+
+### Running it
+
+**Standalone, no Python needed:** grab the latest Windows `.exe` or Linux binary from the [Releases page](../../releases) and run it. On Linux: `chmod +x TradingScanner-linux && ./TradingScanner-linux`.
+
+**From source:**
+```bash
+pip install .
+python scanner_tui.py          # the TUI dashboard
+python -m tradingagents.scanner.scan --help   # the CLI, for one-off scans and --watch mode
+```
+
+**Build your own executable** (see `TradingScanner.spec`, and `.github/workflows/build-tui.yml` for the CI version that builds both platforms on a tag push):
+```bash
+pip install pyinstaller
+python -m PyInstaller TradingScanner.spec
+```
+
+### A few CLI examples
+
+```bash
+python -m tradingagents.scanner.scan --watch --approaching --pullback --regime
+python -m tradingagents.scanner.scan --market stocks-real --timeframe 1d
+python -m tradingagents.scanner.scan --paper-trade --paper-leverage 3 --paper-notional 25
+python -m tradingagents.scanner.scan --gold-smc --watch
+```
+
+(Backtesting is TUI-only for now — open the Backtest tab, pick a symbol/strategy/bar count, and press Run Backtest.)
+
+Run `python -m tradingagents.scanner.scan --help` for the full set of flags — every tier, both market modes, and the paper-trading options are documented inline there.
+
+---
 
 ## TradingAgents Framework
 
-TradingAgents is a multi-agent trading framework that mirrors the dynamics of real-world trading firms. By deploying specialized LLM-powered agents: from fundamental analysts, sentiment experts, and technical analysts, to trader, risk management team, the platform collaboratively evaluates market conditions and informs trading decisions. Moreover, these agents engage in dynamic discussions to pinpoint the optimal strategy.
+TradingAgents is a multi-agent trading framework that mirrors the dynamics of real-world trading firms. By deploying specialized LLM-powered agents — fundamental analysts, sentiment experts, technical analysts, traders, and a risk management team — it collaboratively evaluates market conditions and produces a narrative trading decision for one ticker and date at a time. This is the part of the project inherited from the original [TauricResearch/TradingAgents](https://github.com/TauricResearch/TradingAgents); see [`CHANGELOG.md`](CHANGELOG.md) for its release history.
 
 <p align="center">
   <img src="assets/schema.png" style="width: 100%; height: auto;">
 </p>
 
-> TradingAgents framework is designed for research purposes. Trading performance may vary based on many factors, including the chosen backbone language models, model temperature, trading periods, the quality of data, and other non-deterministic factors. [It is not intended as financial, investment, or trading advice.](https://tauric.ai/disclaimer/)
-
-Our framework decomposes complex trading tasks into specialized roles.
-
 ### Analyst Team
-- Fundamentals Analyst: Evaluates company financials and performance metrics, identifying intrinsic values and potential red flags.
-- Sentiment Analyst: Aggregates news headlines, StockTwits, and Reddit chatter into a single sentiment read to gauge short-term market mood.
-- News Analyst: Monitors global news and macroeconomic indicators, interpreting the impact of events on market conditions.
-- Technical Analyst: Utilizes technical indicators (like MACD and RSI) to detect trading patterns and forecast price movements.
+- **Fundamentals Analyst** — evaluates company financials and performance metrics, identifying intrinsic values and potential red flags.
+- **Sentiment Analyst** — aggregates news headlines, StockTwits, and Reddit chatter into a single sentiment read.
+- **News Analyst** — monitors global news and macroeconomic indicators, interpreting the impact of events on market conditions.
+- **Technical Analyst** — uses technical indicators (like MACD and RSI) to detect trading patterns and forecast price movements.
 
 <p align="center">
   <img src="assets/analyst.png" width="100%" style="display: inline-block; margin: 0 2%;">
 </p>
 
 ### Researcher Team
-- Comprises both bullish and bearish researchers who critically assess the insights provided by the Analyst Team. Through structured debates, they balance potential gains against inherent risks.
+Bullish and bearish researchers critically assess the Analyst Team's findings through structured debate, balancing potential gains against inherent risks.
 
 <p align="center">
   <img src="assets/researcher.png" width="70%" style="display: inline-block; margin: 0 2%;">
 </p>
 
 ### Trader Agent
-- Composes reports from the analysts and researchers to make informed trading decisions, determining the timing and magnitude of trades.
+Composes reports from the analysts and researchers into a trading decision — timing and sizing.
 
 <p align="center">
   <img src="assets/trader.png" width="70%" style="display: inline-block; margin: 0 2%;">
 </p>
 
 ### Risk Management and Portfolio Manager
-- Continuously evaluates portfolio risk by assessing market volatility, liquidity, and other risk factors. The risk management team evaluates and adjusts trading strategies, providing assessment reports to the Portfolio Manager for final decision.
-- The Portfolio Manager approves/rejects the transaction proposal. If approved, the order will be sent to the simulated exchange and executed.
+The risk team continuously evaluates volatility, liquidity, and other risk factors, adjusting strategy and reporting to the Portfolio Manager, who approves or rejects the final proposal.
 
 <p align="center">
   <img src="assets/risk.png" width="70%" style="display: inline-block; margin: 0 2%;">
 </p>
 
-## Installation and CLI
+## Installation
 
-### Installation
-
-Clone TradingAgents:
 ```bash
-git clone https://github.com/TauricResearch/TradingAgents.git
-cd TradingAgents
-```
+git clone https://github.com/Annor-Gyimah/Trading-Scanner.git
+cd Trading-Scanner
 
-Create a virtual environment in any of your favorite environment managers:
-```bash
-conda create -n tradingagents python=3.12
+conda create -n tradingagents python=3.12   # or any env manager you prefer
 conda activate tradingagents
-```
 
-Install the package and its dependencies:
-```bash
 pip install .
 ```
 
-### Docker
+### Docker (TradingAgents framework only)
 
-Alternatively, run with Docker:
 ```bash
 cp .env.example .env  # add your API keys
 docker compose run --rm tradingagents
@@ -127,7 +142,7 @@ For local models with Ollama:
 docker compose --profile ollama run --rm tradingagents-ollama
 ```
 
-### Required APIs
+### Required APIs (TradingAgents framework only — the Scanner needs no API keys)
 
 TradingAgents supports multiple LLM providers. Set the API key for your chosen provider:
 
@@ -153,14 +168,14 @@ For AWS Bedrock, install the extra with `pip install ".[bedrock]"`, set `llm_pro
 
 For local models, configure Ollama with `llm_provider: "ollama"`. The default endpoint is `http://localhost:11434/v1`; set `OLLAMA_BASE_URL` to point at a remote `ollama-serve`. Pull models with `ollama pull <name>`, and pick "Custom model ID" in the CLI for any model not listed by default.
 
-For any other OpenAI-compatible server (vLLM, LM Studio, llama.cpp, or a custom relay), use `llm_provider: "openai_compatible"` and set the endpoint via `backend_url` (or `TRADINGAGENTS_LLM_BACKEND_URL`), e.g. `http://localhost:8000/v1` for vLLM or `http://localhost:1234/v1` for LM Studio. The model is whatever your server serves. No key is needed for local servers; set `OPENAI_COMPATIBLE_API_KEY` when the endpoint requires one.
+For any other OpenAI-compatible server (vLLM, LM Studio, llama.cpp, or a custom relay), use `llm_provider: "openai_compatible"` and set the endpoint via `backend_url` (or `TRADINGAGENTS_LLM_BACKEND_URL`), e.g. `http://localhost:8000/v1` for vLLM or `http://localhost:1234/v1` for LM Studio. No key is needed for local servers; set `OPENAI_COMPATIBLE_API_KEY` when the endpoint requires one.
 
 Alternatively, copy `.env.example` to `.env` and fill in your keys:
 ```bash
 cp .env.example .env
 ```
 
-### CLI Usage
+### TradingAgents CLI Usage
 
 Launch the interactive CLI:
 ```bash
@@ -169,7 +184,7 @@ python -m cli.main     # alternative: run directly from source
 ```
 You will see a screen where you can select your desired tickers, analysis date, LLM provider, research depth, and more.
 
-### Markets and tickers
+### Markets and tickers (TradingAgents framework)
 
 TradingAgents works with any market Yahoo Finance covers, using the exchange-suffixed ticker. Company identity and the alpha benchmark resolve automatically per market.
 
@@ -193,15 +208,24 @@ An interface will appear showing results as they load, letting you track the age
   <img src="assets/cli/cli_transaction.png" width="100%" style="display: inline-block; margin: 0 2%;">
 </p>
 
-## TradingAgents Package
+## Python Usage
 
-### Implementation Details
+Both the Scanner and TradingAgents are usable as plain Python libraries.
 
-We built TradingAgents with LangGraph to ensure flexibility and modularity. The framework supports multiple LLM providers: OpenAI, Google, Anthropic, xAI, DeepSeek, Qwen (Alibaba DashScope, international and China endpoints), GLM (Zhipu), MiniMax (global + China), OpenRouter, Ollama for local models, and Azure OpenAI for enterprise.
+### Scanner
 
-### Python Usage
+```python
+from tradingagents.scanner import scan, run_backtest, evaluate_market_regime
 
-To use TradingAgents inside your code, you can import the `tradingagents` module and initialize a `TradingAgentsGraph()` object. The `.propagate()` function will return a decision. You can run `main.py`, here's also a quick example:
+results = scan(timeframe="1h", market="crypto", top_n=15)   # Confirmed breakouts/breakdowns
+regime = evaluate_market_regime()                            # bullish/neutral/bearish gauge
+backtest = run_backtest("BTC/USDT:USDT", timeframe="1h", strategy="breakout", total_bars=1000)
+print(backtest.win_rate, backtest.avg_r)
+```
+
+### TradingAgents
+
+Import the `tradingagents` module and initialize a `TradingAgentsGraph()` object. The `.propagate()` function returns a decision. You can also run `main.py` directly, or:
 
 ```python
 from tradingagents.graph.trading_graph import TradingAgentsGraph
@@ -233,7 +257,7 @@ print(decision)
 
 See `tradingagents/default_config.py` for all configuration options.
 
-## Persistence and Recovery
+## Persistence and Recovery (TradingAgents framework)
 
 TradingAgents persists two kinds of state across runs.
 
@@ -261,7 +285,9 @@ ta = TradingAgentsGraph(config=config)
 _, decision = ta.propagate("NVDA", "2026-01-15")
 ```
 
-## Reproducibility
+The Scanner keeps its own, separate persistence: favorites at `~/.tradingagents/favorites.json` and the paper-trading ledger at `~/.tradingagents/paper_trades.db` (a small SQLite file — override with `TRADINGAGENTS_PAPER_DB`, mainly useful for testing without touching your real ledger).
+
+## Reproducibility (TradingAgents framework)
 
 TradingAgents is LLM-driven, so two runs of the same ticker and date can differ. This is expected for a research tool built on language models, not a defect. The variation comes from a few distinct sources, and it helps to separate them.
 
@@ -279,17 +305,17 @@ config["temperature"] = 0.0
 # non-reasoning deep/quick model explicitly (e.g. via the Custom model ID option).
 ```
 
-What does not vary anymore: the analyzed company identity is resolved deterministically from the ticker before any agent runs, and the market analyst grounds exact price and indicator claims in a verified data snapshot. Earlier reports of "different companies" or fabricated price levels across runs are addressed by these two mechanisms.
+What does not vary anymore: the analyzed company identity is resolved deterministically from the ticker before any agent runs, and the market analyst grounds exact price and indicator claims in a verified data snapshot.
 
-Backtest results are not guaranteed to match any published figure. Returns depend on the model, the temperature, the date range, data quality, and the sampling above. Treat the framework as a research scaffold for studying multi-agent analysis, not as a strategy with a fixed, replicable return.
+Backtest results (for either the Scanner or the TradingAgents framework) are not guaranteed to match any published figure. Treat both as research scaffolds for studying detection logic and multi-agent analysis, not as a strategy with a fixed, replicable return.
 
 ## Contributing
 
-Contributions are welcome: bug fixes, documentation, and feature ideas; past contributions are credited per release in [`CHANGELOG.md`](CHANGELOG.md).
+Contributions are welcome: bug fixes, documentation, and feature ideas. Past TradingAgents-framework contributions are credited per release in [`CHANGELOG.md`](CHANGELOG.md).
 
-## Citation
+## Credits & Citation
 
-Please reference our work if you find *TradingAgents* provides you with some help :)
+The Scanner, its TUI, backtesting, and paper-trading ledger are original work added in this repository. The TradingAgents multi-agent framework is from [TauricResearch/TradingAgents](https://github.com/TauricResearch/TradingAgents); please cite their work if you find it useful:
 
 ```
 @misc{xiao2025tradingagentsmultiagentsllmfinancial,
