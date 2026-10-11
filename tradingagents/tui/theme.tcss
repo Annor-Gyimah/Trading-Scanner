@@ -210,6 +210,49 @@ DataTable > .datatable--hover {
     border: round #f85149;
 }
 
+/* ---- Backtest tab ---- */
+
+#backtest-controls {
+    height: 4;
+    padding-bottom: 1;
+}
+
+#backtest-controls Input {
+    width: 24;
+    margin-right: 2;
+}
+
+#backtest-controls Select {
+    width: 18;
+    margin-right: 2;
+}
+
+#backtest-summary {
+    color: #e3b341;
+    text-style: bold;
+    padding: 0 0 1 0;
+}
+
+/* ---- Paper trading tab ---- */
+
+#paper-summary {
+    color: #e3b341;
+    text-style: bold;
+    padding: 0 0 1 0;
+}
+
+/* ---- News tab ---- */
+
+#news-controls {
+    height: 4;
+    padding-bottom: 1;
+}
+
+#news-controls Select {
+    width: 14;
+    margin-right: 2;
+}
+
 .gold-direction-long {
     color: #3fb950;
     text-style: bold;
@@ -255,6 +298,168 @@ GlossaryScreen {
 }
 
 #glossary-close-hint {
+    color: #6e7681;
+    text-style: italic;
+    padding-top: 1;
+}
+
+/* ---- Settings modal ---- */
+
+SettingsScreen {
+    align: center middle;
+    background: black 40%;
+}
+
+#settings-panel {
+    width: 70;
+    max-width: 90%;
+    height: auto;
+    max-height: 85%;
+    background: #10151c;
+    border: round #e3b341;
+    padding: 1 2;
+}
+
+#settings-title {
+    color: #e3b341;
+    text-style: bold;
+    padding-bottom: 1;
+}
+
+#settings-body {
+    height: auto;
+    max-height: 20;
+    scrollbar-size-vertical: 1;
+    scrollbar-color: #30363d;
+    scrollbar-color-hover: #e3b341;
+    scrollbar-color-active: #e3b341;
+    scrollbar-background: #10151c;
+}
+
+.settings-row {
+    height: 4;
+    padding-bottom: 1;
+}
+
+.settings-row Label {
+    width: 20;
+    padding-top: 1;
+}
+
+.settings-row Select {
+    width: 16;
+}
+
+#settings-close-hint {
+    color: #6e7681;
+    text-style: italic;
+    padding-top: 1;
+}
+
+/* ---- News detail modal ---- */
+
+NewsDetailScreen {
+    align: center middle;
+    background: black 40%;
+}
+
+#news-detail-panel {
+    width: 70;
+    max-width: 90%;
+    height: auto;
+    max-height: 85%;
+    background: #10151c;
+    border: round #e3b341;
+    padding: 1 2;
+}
+
+#news-detail-title {
+    color: #e3b341;
+    text-style: bold;
+    padding-bottom: 1;
+}
+
+#news-detail-body {
+    height: auto;
+    max-height: 20;
+    scrollbar-size-vertical: 1;
+    scrollbar-color: #30363d;
+    scrollbar-color-hover: #e3b341;
+    scrollbar-color-active: #e3b341;
+    scrollbar-background: #10151c;
+}
+
+#news-detail-headline {
+    padding-bottom: 1;
+}
+
+#news-detail-meta {
+    padding-bottom: 1;
+}
+
+#news-detail-link {
+    color: #58a6ff;
+}
+
+#news-detail-actions {
+    height: 4;
+    padding-top: 1;
+}
+
+#news-detail-actions Button {
+    margin-right: 2;
+    min-width: 16;
+}
+
+/* ---- Paper trade detail modal ---- */
+
+PaperTradeDetailScreen {
+    align: center middle;
+    background: black 40%;
+}
+
+#paper-detail-panel {
+    width: 74;
+    max-width: 90%;
+    height: auto;
+    max-height: 85%;
+    background: #10151c;
+    border: round #e3b341;
+    padding: 1 2;
+}
+
+#paper-detail-title {
+    color: #e3b341;
+    text-style: bold;
+    padding-bottom: 1;
+}
+
+#paper-detail-body {
+    height: auto;
+    max-height: 22;
+    scrollbar-size-vertical: 1;
+    scrollbar-color: #30363d;
+    scrollbar-color-hover: #e3b341;
+    scrollbar-color-active: #e3b341;
+    scrollbar-background: #10151c;
+}
+
+#paper-detail-header, #paper-detail-status, #paper-detail-entry, #paper-detail-targets,
+#paper-detail-exit, #paper-detail-result, #paper-detail-sizing {
+    padding-bottom: 1;
+}
+
+#paper-detail-entrytime {
+    color: #6e7681;
+    padding-bottom: 1;
+}
+
+#paper-detail-reason {
+    color: #c9d1d9;
+    padding-bottom: 1;
+}
+
+#paper-detail-close-hint {
     color: #6e7681;
     text-style: italic;
     padding-top: 1;

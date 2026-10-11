@@ -22,6 +22,12 @@ from .binance_data import get_tradfi_perp_universe
 SUPPORTED_TIMEFRAMES = ("15m", "1h", "1d")
 _PERIOD_MAP = {"15m": "5d", "1h": "1mo", "1d": "2y"}
 
+# Yahoo's actual caps on how far back each intraday interval goes, regardless
+# of how much history is asked for -- used only by fetch_stock_ohlcv_history_df
+# (backtesting wants as much history as Yahoo will give; live scanning above
+# only needs the last ~120 bars, hence the much shorter _PERIOD_MAP).
+_HISTORY_PERIOD_MAP = {"15m": "60d", "1h": "730d", "1d": "10y"}
+
 
 def get_real_stock_universe(limit: int | None = None) -> list[str]:
     """Plain tickers (e.g. 'AAPL', not a Binance pair) -- reuses Binance's
@@ -55,3 +61,25 @@ def fetch_stock_ohlcv_df(ticker: str, timeframe: str = "1h", limit: int = 120) -
         "Low": "low", "Close": "close", "Volume": "volume",
     })
     return df[["timestamp", "open", "high", "low", "close", "volume"]].reset_index(drop=True)
+
+
+def fetch_stock_ohlcv_history_df(ticker: str, timeframe: str = "1d", total_bars: int = 500) -> pd.DataFrame:
+    """As much real history as Yahoo will give for `timeframe` -- for
+    backtesting, not live scanning (see _HISTORY_PERIOD_MAP's note above).
+    15m bars only go back ~60 days no matter what total_bars asks for; 1h
+    reaches back about 2 years; 1d reaches back a full decade."""
+    if timeframe not in SUPPORTED_TIMEFRAMES:
+        raise ValueError(
+            f"Real stock data supports {SUPPORTED_TIMEFRAMES} only -- got {timeframe!r}."
+        )
+    raw = yf.Ticker(ticker).history(period=_HISTORY_PERIOD_MAP[timeframe], interval=timeframe)
+    if raw.empty:
+        raise ValueError(f"No history returned for {ticker}")
+    df = raw.reset_index()
+    time_col = "Datetime" if "Datetime" in df.columns else "Date"
+    df = df.rename(columns={
+        time_col: "timestamp", "Open": "open", "High": "high",
+        "Low": "low", "Close": "close", "Volume": "volume",
+    })
+    df = df[["timestamp", "open", "high", "low", "close", "volume"]].reset_index(drop=True)
+    return df.tail(total_bars).reset_index(drop=True)

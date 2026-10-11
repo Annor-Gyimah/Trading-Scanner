@@ -108,6 +108,68 @@ GLOSSARY: dict[str, str] = {
         "level being triggered and absorbed, rather than genuine continuation "
         "through it."
     ),
+    "R-MULTIPLE": (
+        "How big the move was relative to what you were risking, as a ratio -- "
+        "independent of price or position size, so it's the one number that's "
+        "directly comparable across completely different symbols. Formula: "
+        "(exit price - entry price) / (entry price - stop price), sign-adjusted "
+        "for direction. +2.0R means you made twice what you were risking; -1.0R "
+        "means a clean stop-out (the maximum normal loss, by design -- that's "
+        "what the stop is FOR). A trade that touched a take-profit can still "
+        "show less than the target's 'full' R if price didn't go all the way, "
+        "but in this scanner's paper-trading ledger R is only recorded at an "
+        "actual exit (a hit target or a hit stop), not marked-to-market."
+    ),
+    "$ P&L (PAPER TRADING)": (
+        "The SAME outcome as R-multiple, translated into dollars for a "
+        "hypothetical position: entry_price/notional ('margin') gives a coin "
+        "quantity, multiplied by leverage, multiplied by the price move. "
+        "Changing leverage scales this number directly (5x leverage = 5x the "
+        "dollars) but never changes R -- R is about price distance relative to "
+        "risk, leverage is just how much capital is behind that same distance. "
+        "Each paper trade's margin ($10 by default) and leverage are independent "
+        "per trade, not a shared pool split across every open position."
+    ),
+    "WIN RATE (PAPER TRADING)": (
+        "wins / (wins + losses) x 100, counting only RESOLVED trades -- a "
+        "trade that's still OPEN (nothing hit yet) isn't counted on either "
+        "side. A trade is a win the moment it touches ANY take-profit level, "
+        "even if it's still tracking for a higher one; it can never flip to a "
+        "loss afterward, since a real trader would already have banked that "
+        "profit. Meaningless on a small sample (a handful of trades) -- wait "
+        "for real volume before trusting this number."
+    ),
+    "AVG R / TOTAL R (PAPER TRADING)": (
+        "AVG R is the mean R-multiple across every resolved trade (wins AND "
+        "losses) -- the single best 'does this detector have edge' number, "
+        "since it's weighted by how big wins/losses were, not just how many "
+        "of each. TOTAL R is the plain sum across all resolved trades (what "
+        "you'd have if you risked the exact same 1 unit on every trade, no "
+        "compounding)."
+    ),
+    "TPS HIT (PAPER TRADING)": (
+        "How many of the staged take-profit levels (TP1/TP2/TP3) have "
+        "actually been touched by real price action since entry -- shown as "
+        "'1x', '2x', or '3x'. Only ever counts TAKE PROFITS, never stop-losses: "
+        "a stop-loss is a single binary event (hit or not), there's no "
+        "'levels' concept for it, so a LOST trade always shows '-' here, the "
+        "same as a trade that's still OPEN with nothing hit yet -- the dash "
+        "doesn't distinguish those two cases, only the Status column does."
+    ),
+    "LEVERAGE / MARGIN (PAPER TRADING)": (
+        "Margin is the fixed dollar amount set aside for one paper trade "
+        "($10 by default). Leverage multiplies that into total exposure "
+        "(margin x leverage) -- 5x leverage on $10 margin controls $50 of the "
+        "asset, so the SAME price move pays out 5x the dollars. Leverage is "
+        "locked into a trade the moment it's logged and never changes "
+        "afterward, even if you change the app's current leverage setting "
+        "later -- that only affects trades logged from that point on. Real "
+        "leveraged trading also carries liquidation risk (price moving "
+        "against you enough to wipe the margin before your stop-loss can "
+        "fire) which this paper-trading model does NOT simulate -- it "
+        "assumes your stop always fills at exactly the stop price, which is "
+        "optimistic at high leverage on a fast-moving symbol."
+    ),
 }
 
 # Which glossary keys matter for each tier's printed columns -- lets each
@@ -123,6 +185,10 @@ TIER_TERMS: dict[str, list[str]] = {
         "LIQUIDITY POOL / EQUAL HIGHS/LOWS (SMC)",
         "LIQUIDITY SWEEP (SMC)",
         "VOLUME RATIO / VOL X",
+    ],
+    "paper": [
+        "R-MULTIPLE", "$ P&L (PAPER TRADING)", "WIN RATE (PAPER TRADING)",
+        "AVG R / TOTAL R (PAPER TRADING)", "TPS HIT (PAPER TRADING)", "LEVERAGE / MARGIN (PAPER TRADING)",
     ],
 }
 

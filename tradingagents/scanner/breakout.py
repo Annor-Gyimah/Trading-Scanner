@@ -42,6 +42,7 @@ class BreakoutSignal:
     rsi: float
     candle_change_pct: float
     reason: str
+    entry_time: pd.Timestamp | None = None  # the breakout candle's own close time
     market_cap: float | None = None
     float_ratio: float | None = None  # circulating_supply / max_supply, context only
 
@@ -182,6 +183,7 @@ def evaluate_breakout(
             take_profits=[round(float(tp), 6) for tp in take_profits],
             volume_ratio=round(float(volume_ratio), 2), rsi=round(float(rsi), 1),
             candle_change_pct=round(float(candle_change_pct), 2), reason=reason,
+            entry_time=latest["timestamp"],
         )
 
     # ---- SHORT: break below the prior lookback-bar low (mirror) ----
@@ -212,6 +214,7 @@ def evaluate_breakout(
             take_profits=[round(float(tp), 6) for tp in take_profits],
             volume_ratio=round(float(volume_ratio), 2), rsi=round(float(rsi), 1),
             candle_change_pct=round(float(candle_change_pct), 2), reason=reason,
+            entry_time=latest["timestamp"],
         )
 
     return None
@@ -377,6 +380,7 @@ class PullbackSignal:
     targets: list[float]
     volume_ratio: float
     reason: str
+    entry_time: pd.Timestamp | None = None  # the pullback-confirming candle's own close time
 
 
 def _find_recent_impulse(
@@ -501,7 +505,7 @@ def evaluate_pullback(
             broken_level=float(pre_impulse_level), impulse_high=float(impulse_high),
             retrace_pct=round(float(retrace_pct), 1), stop_loss=float(stop_loss),
             targets=[round(float(t), 6) for t in targets], volume_ratio=round(float(volume_ratio), 2),
-            reason=reason,
+            reason=reason, entry_time=latest["timestamp"],
         )
 
     broke_below_pct = (pre_impulse_level - latest["close"]) / pre_impulse_level * 100
@@ -519,7 +523,7 @@ def evaluate_pullback(
             broken_level=float(pre_impulse_level), impulse_high=float(impulse_high),
             retrace_pct=round(float(retrace_pct), 1), stop_loss=float(stop_loss),
             targets=[round(float(t), 6) for t in targets], volume_ratio=round(float(volume_ratio), 2),
-            reason=reason,
+            reason=reason, entry_time=latest["timestamp"],
         )
 
     return None

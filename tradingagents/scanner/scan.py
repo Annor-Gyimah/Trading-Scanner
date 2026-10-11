@@ -29,6 +29,7 @@ from .breakout import (
 from .glossary import full_glossary_text, terms_for
 from .gold_smc import GoldSMCSignal, evaluate_gold_smc
 from .market_cap import base_ticker, fetch_market_cap_table
+from .paper_trading import PaperStats, get_stats, record_signal, resolve_open_trades
 from .regime import RegimeSignal, evaluate_market_regime
 from .stock_data import fetch_stock_ohlcv_df, get_real_stock_universe
 
@@ -302,6 +303,51 @@ def _print_gold_smc(results: list[GoldSMCSignal]) -> None:
     )
 
 
+def _log_paper_trades(
+    results: list[BreakoutSignal], market: str, timeframe: str, leverage: float = 1.0, notional_usd: float = 10.0,
+) -> int:
+    """Log every CONFIRMED hit as an open paper trade (record_signal no-ops on
+    a repeat of the same symbol/direction/entry_time, so calling this every
+    scan cycle is safe). Returns how many were newly logged this call."""
+    from datetime import timezone
+
+    logged = 0
+    for s in results:
+        entry_time = s.entry_time
+        if entry_time is None:
+            continue
+        entry_time = entry_time.to_pydatetime().replace(tzinfo=timezone.utc)
+        tps = s.take_profits
+        if record_signal(
+            symbol=s.symbol, market=market, timeframe=timeframe, tier="confirmed", direction=s.direction,
+            entry_time=entry_time, entry_price=s.close, stop_loss=s.stop_loss,
+            target1=tps[0], target2=tps[1] if len(tps) > 1 else None, target3=tps[2] if len(tps) > 2 else None,
+            leverage=leverage, notional_usd=notional_usd,
+            score=s.score, reason=s.reason,
+        ):
+            logged += 1
+    return logged
+
+
+def _print_paper_stats(stats: PaperStats, newly_logged: int, newly_resolved: int) -> None:
+    print(
+        f"\n{colors.dim('PAPER TRADING')} ({newly_logged} new signal(s) logged, "
+        f"{newly_resolved} resolved this scan)"
+    )
+    print(
+        f"  {stats.total} total ({stats.open} open, {stats.wins}W/{stats.losses}L) -- "
+        f"win rate {stats.win_rate:.0f}%, avg {stats.avg_r:+.2f}R, total {stats.total_r:+.2f}R "
+        f"(${stats.total_pnl_usd:+.2f} total $ P&L, at each trade's own margin x leverage)"
+    )
+    print(
+        "  Tracks what the CONFIRMED tier actually told you live, checked against what really "
+        "happened next -- not a backtest replay. A win stays open past TP1 to chase TP2/TP3, only "
+        "locking in at TP3 or if price falls back through the original stop. Needs real time to "
+        "accumulate a meaningful sample."
+        + ("\n\n" + terms_for("paper") if stats.total else "")
+    )
+
+
 def _print_regime(s: RegimeSignal) -> None:
     label = colors.long_label("BULLISH") if s.label == "bullish" else (
         colors.short_label("BEARISH") if s.label == "bearish" else colors.dim("NEUTRAL")
@@ -465,6 +511,9 @@ def watch(
     accumulation: bool = False,
     accumulation_timeframe: str = "4h",
     regime: bool = False,
+    paper_trade: bool = False,
+    paper_leverage: float = 1.0,
+    paper_notional: float = 10.0,
     **scan_kwargs,
 ) -> None:
     """Re-run `scan` every time a new candle closes on `timeframe`, beeping on any hit.
@@ -512,6 +561,14 @@ def watch(
                 accumulation_kwargs = {**scan_kwargs, "timeframe": accumulation_timeframe}
                 accumulation_results = scan_accumulation(**accumulation_kwargs, _market_caps=market_caps)
                 _print_accumulation(accumulation_results)
+
+            if paper_trade:
+                market = scan_kwargs.get("market", "crypto")
+                newly_logged = _log_paper_trades(
+                    results, market, timeframe, leverage=paper_leverage, notional_usd=paper_notional,
+                )
+                newly_resolved = len(resolve_open_trades())
+                _print_paper_stats(get_stats(market=market, timeframe=timeframe), newly_logged, newly_resolved)
 
             sys.stdout.flush()
             if results:
@@ -693,6 +750,44 @@ Examples:
         ),
     )
     parser.add_argument(
+        "--paper-trade", action="store_true",
+        help=(
+            "ALSO log every CONFIRMED hit as a paper trade in a local SQLite log "
+            "(~/.tradingagents/paper_trades.db), and re-check all still-open paper "
+            "trades against fresh price data to see if they've hit their stop or "
+            "target since. Prints running win-rate/R stats after each scan. This is "
+            "the live, ever-growing counterpart to --backtest-style replay: it tracks "
+            "what the scanner actually told you, not a historical simulation. "
+            "Needs real time (days/weeks) to accumulate a meaningful sample -- "
+            "one scan's stats mean little. Use --paper-stats to just view current "
+            "stats without scanning."
+        ),
+    )
+    parser.add_argument(
+        "--paper-leverage", type=float, default=1.0,
+        help=(
+            "Leverage applied to new paper trades' $ P&L (default: 1.0, i.e. none -- "
+            "$10 of margin buys exactly $10 of exposure). This does NOT change the "
+            "R-multiple (R is a price-distance ratio, independent of position size), "
+            "only the $ figure: --paper-leverage 5 means $10 margin controls $50 of "
+            "exposure, so a win/loss pays out 5x the dollars (same R). Locked into "
+            "each trade at the moment it's logged -- changing this flag on a later "
+            "run never touches trades already in the ledger, only new ones."
+        ),
+    )
+    parser.add_argument(
+        "--paper-notional", type=float, default=10.0,
+        help="Margin (in USD) set aside per new paper trade (default: 10.0). Same locked-in-at-log-time rule as --paper-leverage.",
+    )
+    parser.add_argument(
+        "--paper-stats", action="store_true",
+        help=(
+            "Print current paper-trading stats (from prior --paper-trade runs) and "
+            "exit -- no scan, no network calls. Optionally narrow with --market/"
+            "--timeframe (both default to the usual scan defaults)."
+        ),
+    )
+    parser.add_argument(
         "--gold-smc", action="store_true",
         help=(
             "Run ONLY the SMC (Smart Money Concepts) liquidity-sweep analysis on "
@@ -746,6 +841,10 @@ def main() -> None:
         print(full_glossary_text())
         return
 
+    if args.paper_stats:
+        _print_paper_stats(get_stats(market=args.market, timeframe=args.timeframe), 0, 0)
+        return
+
     if args.gold_smc:
         if args.watch:
             watch_gold_smc(htf_timeframe=args.htf, ltf_timeframe=args.ltf)
@@ -770,6 +869,9 @@ def main() -> None:
             accumulation=args.accumulation,
             accumulation_timeframe=args.accumulation_timeframe,
             regime=args.regime and args.market == "crypto",
+            paper_trade=args.paper_trade,
+            paper_leverage=args.paper_leverage,
+            paper_notional=args.paper_notional,
             **scan_kwargs,
         )
         return
@@ -792,6 +894,13 @@ def main() -> None:
         accumulation_kwargs = {**scan_kwargs, "timeframe": args.accumulation_timeframe}
         accumulation_results = scan_accumulation(**accumulation_kwargs)
         _print_accumulation(accumulation_results)
+
+    if args.paper_trade:
+        newly_logged = _log_paper_trades(
+            results, args.market, args.timeframe, leverage=args.paper_leverage, notional_usd=args.paper_notional,
+        )
+        newly_resolved = len(resolve_open_trades())
+        _print_paper_stats(get_stats(market=args.market, timeframe=args.timeframe), newly_logged, newly_resolved)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,8 @@
 from .accumulation import AccumulationSignal, evaluate_accumulation
+from .backtest import BacktestSummary, BacktestTrade, run_backtest
 from .binance_data import (
     fetch_ohlcv_df,
+    fetch_ohlcv_history_df,
     get_liquid_perp_universe,
     get_tradfi_perp_universe,
     timeframe_to_seconds,
@@ -15,8 +17,10 @@ from .breakout import (
 )
 from .glossary import full_glossary_text, terms_for
 from .gold_smc import GoldSMCSignal, analyze_htf, evaluate_gold_smc
+from .news import NewsItem, fetch_crypto_news, fetch_stock_news
+from .paper_trading import PaperStats, PaperTrade, get_stats, get_trades, record_signal, resolve_open_trades
 from .regime import RegimeSignal, evaluate_market_regime
-from .stock_data import fetch_stock_ohlcv_df, get_real_stock_universe
+from .stock_data import fetch_stock_ohlcv_df, fetch_stock_ohlcv_history_df, get_real_stock_universe
 from .scan import (
     GOLD_SYMBOL,
     scan,
@@ -32,9 +36,14 @@ from .scan import (
 __all__ = [
     "AccumulationSignal",
     "ApproachingSignal",
+    "BacktestSummary",
+    "BacktestTrade",
     "BreakoutSignal",
     "GOLD_SYMBOL",
     "GoldSMCSignal",
+    "NewsItem",
+    "PaperStats",
+    "PaperTrade",
     "PullbackSignal",
     "analyze_htf",
     "evaluate_accumulation",
@@ -42,14 +51,23 @@ __all__ = [
     "evaluate_breakout",
     "evaluate_gold_smc",
     "evaluate_pullback",
+    "fetch_crypto_news",
     "fetch_ohlcv_df",
+    "fetch_ohlcv_history_df",
+    "fetch_stock_news",
     "fetch_stock_ohlcv_df",
+    "fetch_stock_ohlcv_history_df",
     "full_glossary_text",
     "get_liquid_perp_universe",
     "get_real_stock_universe",
+    "get_stats",
+    "get_trades",
     "get_tradfi_perp_universe",
+    "record_signal",
+    "resolve_open_trades",
     "RegimeSignal",
     "evaluate_market_regime",
+    "run_backtest",
     "scan",
     "scan_accumulation",
     "scan_approaching",

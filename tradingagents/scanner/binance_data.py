@@ -106,3 +106,29 @@ def fetch_ohlcv_df(symbol: str, timeframe: str = "1h", limit: int = 120) -> pd.D
     df = pd.DataFrame(raw, columns=["timestamp", "open", "high", "low", "close", "volume"])
     df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
     return df
+
+
+def fetch_ohlcv_history_df(symbol: str, timeframe: str = "1h", total_bars: int = 1000) -> pd.DataFrame:
+    """Paginated OHLCV fetch for backtesting -- a single fetch_ohlcv call is
+    capped (Binance caps it at 1500 candles), so this walks `since` forward in
+    chunks until `total_bars` candles are collected or the feed catches up to
+    now, whichever comes first."""
+    ex = get_exchange()
+    tf_ms = timeframe_to_seconds(timeframe) * 1000
+    chunk = 1500
+    since = ex.milliseconds() - total_bars * tf_ms
+    rows: list[list] = []
+    while len(rows) < total_bars:
+        batch = ex.fetch_ohlcv(symbol, timeframe=timeframe, since=since, limit=chunk)
+        if not batch:
+            break
+        rows.extend(batch)
+        if batch[-1][0] <= since:
+            break  # exchange isn't advancing -- avoid spinning forever
+        since = batch[-1][0] + tf_ms
+        if len(batch) < chunk:
+            break  # fewer than a full page back means we've caught up to now
+    df = pd.DataFrame(rows, columns=["timestamp", "open", "high", "low", "close", "volume"])
+    df = df.drop_duplicates(subset="timestamp").sort_values("timestamp").reset_index(drop=True)
+    df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
+    return df.tail(total_bars).reset_index(drop=True)
