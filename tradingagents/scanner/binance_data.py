@@ -110,12 +110,21 @@ def fetch_ohlcv_df(symbol: str, timeframe: str = "1h", limit: int = 120) -> pd.D
 
 def fetch_ohlcv_history_df(symbol: str, timeframe: str = "1h", total_bars: int = 1000) -> pd.DataFrame:
     """Paginated OHLCV fetch for backtesting -- a single fetch_ohlcv call is
-    capped (Binance caps it at 1500 candles), so this walks `since` forward in
-    chunks until `total_bars` candles are collected or the feed catches up to
-    now, whichever comes first."""
+    capped at 1000 candles regardless of a higher `limit` (Binance's real
+    per-request cap, not 1500 -- a single request for more than that always
+    comes back short), so this walks `since` forward in chunks until
+    `total_bars` candles are collected or the feed catches up to now,
+    whichever comes first.
+
+    Catching up to "now" has to be judged by comparing the last candle's
+    own timestamp to the current time, NOT by whether a page came back
+    shorter than requested -- every page is shorter than 1500 once
+    `total_bars` exceeds 1000, which used to make this return after a
+    single page no matter how far `since` still was from the present,
+    silently truncating any total_bars > ~1000 to stale data."""
     ex = get_exchange()
     tf_ms = timeframe_to_seconds(timeframe) * 1000
-    chunk = 1500
+    chunk = 1000
     since = ex.milliseconds() - total_bars * tf_ms
     rows: list[list] = []
     while len(rows) < total_bars:
@@ -123,11 +132,12 @@ def fetch_ohlcv_history_df(symbol: str, timeframe: str = "1h", total_bars: int =
         if not batch:
             break
         rows.extend(batch)
-        if batch[-1][0] <= since:
+        last_ts = batch[-1][0]
+        if last_ts <= since:
             break  # exchange isn't advancing -- avoid spinning forever
-        since = batch[-1][0] + tf_ms
-        if len(batch) < chunk:
-            break  # fewer than a full page back means we've caught up to now
+        since = last_ts + tf_ms
+        if since >= ex.milliseconds():
+            break  # caught up to now
     df = pd.DataFrame(rows, columns=["timestamp", "open", "high", "low", "close", "volume"])
     df = df.drop_duplicates(subset="timestamp").sort_values("timestamp").reset_index(drop=True)
     df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")

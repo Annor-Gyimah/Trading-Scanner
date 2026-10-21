@@ -112,3 +112,103 @@ def evaluate_accumulation(
         close=close,
         reason=reason,
     )
+
+
+@dataclass
+class VolSqueezeSignal:
+    """Self-referential sibling of AccumulationSignal: instead of a fixed
+    absolute range%/ATR% cap, flags a symbol only when its CURRENT base is
+    tighter than `percentile_threshold`% of its OWN trailing history.
+
+    Built after backtesting evaluate_accumulation()'s fixed thresholds
+    across 70 liquid symbols: it fired on 85-95% of all bars for
+    BTC/BNB/TRX/SOL (tight-trading blue chips are "basing" by that
+    definition almost always, so the flag carries no information for
+    them) and 0% for several naturally volatile small-caps (never tight
+    enough to qualify even in their own quietest moments) -- and its
+    catch rate on genuinely idiosyncratic single-symbol explosions
+    (34.5%) was WORSE than its own 52.4% overall base rate, meaning it
+    was net-negatively associated with an imminent idiosyncratic move,
+    not predictive of one. A relative, per-symbol threshold is the fix:
+    "tight for THIS symbol, right now" auto-calibrates away the blue-chip/
+    small-cap mismatch that broke the fixed-threshold version.
+    """
+
+    symbol: str
+    score: float
+    base_range_pct: float
+    atr_pct: float
+    range_percentile: float  # 0-100, current range% vs this symbol's own trailing history (lower = tighter than usual)
+    atr_percentile: float
+    position_in_base: float
+    close: float
+    reason: str
+
+
+def evaluate_accumulation_relative(
+    df: pd.DataFrame,
+    base_window: int = 60,
+    history_window: int = 300,
+    percentile_threshold: float = 25.0,
+    max_spike_ratio: float = 3.0,
+    breakout_buffer_pct: float = 5.0,
+) -> VolSqueezeSignal | None:
+    """Return a VolSqueezeSignal if the current base is tighter than
+    `percentile_threshold`% of this symbol's own trailing `history_window`
+    bars (on BOTH range% and ATR%), and hasn't already broken away, else
+    None. See VolSqueezeSignal's docstring for why this replaces a fixed
+    absolute cap rather than just tuning the old one's numbers.
+    """
+    closed = df.iloc[:-1]
+    if len(closed) < base_window + history_window:
+        return None
+
+    high_roll = closed["high"].rolling(base_window).max()
+    low_roll = closed["low"].rolling(base_window).min()
+    range_pct_series = (high_roll - low_roll) / low_roll * 100
+    atr_pct_series = ((closed["high"] - closed["low"]) / closed["close"]).rolling(base_window).mean() * 100
+
+    range_hist = range_pct_series.iloc[-history_window:]
+    atr_hist = atr_pct_series.iloc[-history_window:]
+    if range_hist.isna().any() or atr_hist.isna().any():
+        return None
+
+    current_range_pct = float(range_hist.iloc[-1])
+    current_atr_pct = float(atr_hist.iloc[-1])
+    range_percentile = float((range_hist < current_range_pct).mean() * 100)
+    atr_percentile = float((atr_hist < current_atr_pct).mean() * 100)
+
+    if range_percentile > percentile_threshold or atr_percentile > percentile_threshold:
+        return None
+
+    base = closed.iloc[-base_window:]
+    base_high = float(base["high"].max())
+    base_low = float(base["low"].min())
+    if base_low <= 0 or base_high <= base_low:
+        return None
+    latest = closed.iloc[-1]
+
+    avg_volume = base["volume"].mean()
+    if avg_volume > 0 and (base["volume"].iloc[-3:] / avg_volume).max() > max_spike_ratio:
+        return None  # already launching right now
+
+    close = float(latest["close"])
+    if close > base_high * (1 + breakout_buffer_pct / 100):
+        return None
+    if close < base_low * (1 - breakout_buffer_pct / 100):
+        return None
+
+    position_in_base = (close - base_low) / (base_high - base_low)
+    score = (percentile_threshold - range_percentile) + (percentile_threshold - atr_percentile) * 1.5
+
+    reason = (
+        f"Basing in a {current_range_pct:.0f}% range -- tighter than {100 - range_percentile:.0f}% of this "
+        f"symbol's own last {history_window} bars (ATR tighter than {100 - atr_percentile:.0f}% of its own history)."
+    )
+
+    return VolSqueezeSignal(
+        symbol="", score=round(score, 3), base_range_pct=round(current_range_pct, 1),
+        atr_pct=round(current_atr_pct, 2), range_percentile=round(range_percentile, 1),
+        atr_percentile=round(atr_percentile, 1), position_in_base=round(position_in_base, 2),
+        close=close, reason=reason,
+    )

@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import threading
 from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -51,9 +52,27 @@ _NEW_COLUMNS = [
 ]
 
 
+_schema_lock = threading.Lock()
+_schema_ready = False
+
+
 def _connect() -> sqlite3.Connection:
+    global _schema_ready
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=30000")
+    if _schema_ready:
+        return conn
+    with _schema_lock:
+        if _schema_ready:
+            return conn
+        _init_schema(conn)
+        _schema_ready = True
+    return conn
+
+
+def _init_schema(conn: sqlite3.Connection) -> None:
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS trades (
@@ -95,7 +114,6 @@ def _connect() -> sqlite3.Connection:
             conn.execute(f"ALTER TABLE trades ADD COLUMN {name} {decl}")
         except sqlite3.OperationalError:
             pass
-    return conn
 
 
 @dataclass
@@ -395,4 +413,41 @@ def get_stats(market: str | None = None, timeframe: str | None = None, tier: str
         total=total, open=open_count, wins=wins, losses=losses,
         win_rate=round(win_rate, 1), avg_r=round(avg_r, 2), total_r=round(sum(resolved_r), 2),
         total_pnl_usd=round(total_pnl_usd, 2),
+    )
+
+
+@dataclass
+class DailyPnL:
+    daily: dict[int, float]  # day-of-month -> net $ P&L, only days with at least one resolved trade
+    total_profit: float  # sum of positive days
+    total_loss: float  # sum of negative days (negative number)
+    net: float
+
+
+def get_daily_pnl(year: int, month: int, market: str | None = None) -> DailyPnL:
+    """Net $ P&L per day for one calendar month, keyed by exit date (when a
+    trade's outcome actually happened, not when it was entered) -- the same
+    convention a real exchange's PNL calendar uses. Only resolved trades
+    (won/lost) count; a still-open trade contributes nothing until it closes."""
+    clauses = ["status IN ('won', 'lost')", "exit_time IS NOT NULL"]
+    params: list = []
+    if market is not None:
+        clauses.append("market = ?")
+        params.append(market)
+    where = "WHERE " + " AND ".join(clauses)
+    with closing(_connect()) as conn:
+        rows = conn.execute(f"SELECT exit_time, pnl_usd FROM trades {where}", params).fetchall()
+    daily: dict[int, float] = {}
+    for exit_time_str, pnl in rows:
+        if pnl is None:
+            continue
+        dt = datetime.fromisoformat(exit_time_str)
+        if dt.year == year and dt.month == month:
+            daily[dt.day] = daily.get(dt.day, 0.0) + pnl
+    total_profit = sum(v for v in daily.values() if v > 0)
+    total_loss = sum(v for v in daily.values() if v < 0)
+    return DailyPnL(
+        daily={d: round(v, 2) for d, v in daily.items()},
+        total_profit=round(total_profit, 2), total_loss=round(total_loss, 2),
+        net=round(total_profit + total_loss, 2),
     )

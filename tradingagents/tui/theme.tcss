@@ -160,6 +160,20 @@ DataTable > .datatable--cursor {
     background: #1c2a3a;
 }
 
+/* ---- Structure tab ---- */
+/* Six tables stacked in one pane would otherwise all inherit DataTable's
+   height: 1fr and get squeezed to an equal, tiny sliver of whatever space
+   is left. Scrolling the pane and giving each table a fixed height instead
+   means every table gets enough room to actually read, and the pane
+   scrolls for the rest -- same fix TabPane itself doesn't apply by default. */
+#structure-scroll {
+    height: 1fr;
+}
+
+.structure-table {
+    height: 11;
+}
+
 DataTable > .datatable--hover {
     background: #141b26;
 }
@@ -181,33 +195,6 @@ DataTable > .datatable--hover {
     padding: 2;
     content-align: center middle;
     height: 1fr;
-}
-
-/* ---- Gold SMC card ---- */
-
-#gold-controls {
-    height: 4;
-    padding-bottom: 1;
-}
-
-#gold-controls Select {
-    width: 14;
-    margin-right: 2;
-}
-
-#gold-card {
-    border: round #262c36;
-    padding: 1 2;
-    height: auto;
-    min-height: 10;
-}
-
-#gold-card.long {
-    border: round #3fb950;
-}
-
-#gold-card.short {
-    border: round #f85149;
 }
 
 /* ---- Backtest tab ---- */
@@ -241,6 +228,12 @@ DataTable > .datatable--hover {
     padding: 0 0 1 0;
 }
 
+#testnet-summary {
+    color: #e3b341;
+    text-style: bold;
+    padding: 0 0 1 0;
+}
+
 /* ---- News tab ---- */
 
 #news-controls {
@@ -251,16 +244,6 @@ DataTable > .datatable--hover {
 #news-controls Select {
     width: 14;
     margin-right: 2;
-}
-
-.gold-direction-long {
-    color: #3fb950;
-    text-style: bold;
-}
-
-.gold-direction-short {
-    color: #f85149;
-    text-style: bold;
 }
 
 .value-entry { color: #58a6ff; text-style: bold; }
@@ -303,6 +286,42 @@ GlossaryScreen {
     padding-top: 1;
 }
 
+/* ---- How-To modal ---- */
+
+HowToScreen {
+    align: center middle;
+    background: black 40%;
+}
+
+#howto-panel {
+    width: 90%;
+    height: 85%;
+    background: #10151c;
+    border: round #e3b341;
+    padding: 1 2;
+}
+
+#howto-title {
+    color: #e3b341;
+    text-style: bold;
+    padding-bottom: 1;
+}
+
+#howto-body {
+    height: 1fr;
+    scrollbar-size-vertical: 1;
+    scrollbar-color: #30363d;
+    scrollbar-color-hover: #e3b341;
+    scrollbar-color-active: #e3b341;
+    scrollbar-background: #10151c;
+}
+
+#howto-close-hint {
+    color: #6e7681;
+    text-style: italic;
+    padding-top: 1;
+}
+
 /* ---- Settings modal ---- */
 
 SettingsScreen {
@@ -311,8 +330,8 @@ SettingsScreen {
 }
 
 #settings-panel {
-    width: 70;
-    max-width: 90%;
+    width: 92;
+    max-width: 94%;
     height: auto;
     max-height: 85%;
     background: #10151c;
@@ -328,7 +347,7 @@ SettingsScreen {
 
 #settings-body {
     height: auto;
-    max-height: 20;
+    max-height: 34;
     scrollbar-size-vertical: 1;
     scrollbar-color: #30363d;
     scrollbar-color-hover: #e3b341;
@@ -350,10 +369,69 @@ SettingsScreen {
     width: 16;
 }
 
+#settings-testnet-label {
+    width: 42;
+}
+
 #settings-close-hint {
     color: #6e7681;
     text-style: italic;
     padding-top: 1;
+}
+
+/* ---- Paper trading calendar modal ---- */
+
+PaperCalendarScreen {
+    align: center middle;
+    background: black 40%;
+}
+
+#calendar-panel {
+    width: 90;
+    max-width: 94%;
+    height: auto;
+    max-height: 90%;
+    background: #10151c;
+    border: round #e3b341;
+    padding: 1 2;
+}
+
+#calendar-title {
+    color: #e3b341;
+    text-style: bold;
+    padding-bottom: 1;
+}
+
+#calendar-summary {
+    padding-bottom: 1;
+}
+
+#calendar-nav {
+    height: 3;
+    align: center middle;
+    padding-bottom: 1;
+}
+
+#calendar-nav Button {
+    min-width: 10;
+    margin: 0 2;
+}
+
+#calendar-nav Label {
+    width: 20;
+    text-align: center;
+    text-style: bold;
+    color: #e3b341;
+}
+
+#calendar-grid {
+    height: auto;
+    padding-bottom: 1;
+}
+
+#calendar-close-hint {
+    color: #6e7681;
+    text-style: italic;
 }
 
 /* ---- News detail modal ---- */

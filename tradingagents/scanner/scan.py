@@ -30,7 +30,16 @@ from .glossary import full_glossary_text, terms_for
 from .gold_smc import GoldSMCSignal, evaluate_gold_smc
 from .market_cap import base_ticker, fetch_market_cap_table
 from .paper_trading import PaperStats, get_stats, record_signal, resolve_open_trades
+from .testnet_exec import credentials_configured, execute_signals
 from .regime import RegimeSignal, evaluate_market_regime
+from .smc import (
+    ApproachingSMCSignal,
+    SMCSignal,
+    ZoneRetestSignal,
+    evaluate_smc_approaching,
+    evaluate_smc_structure,
+    evaluate_zone_retest,
+)
 from .stock_data import fetch_stock_ohlcv_df, get_real_stock_universe
 
 GOLD_SYMBOL = "XAU/USDT:USDT"
@@ -221,6 +230,119 @@ def scan_pullback(
     return longs[:top_n] + shorts[:top_n]
 
 
+def scan_smc(
+    timeframe: str = "1h",
+    min_quote_volume_usd: float = 2_000_000,
+    universe_limit: int = 200,
+    top_n: int = 15,
+    max_market_cap_usd: float | None = None,
+    market: str = "crypto",
+    _market_caps: dict[str, dict] | None = None,
+) -> list[SMCSignal]:
+    """Market-structure breaks (BOS/CHoCH), both directions -- see smc.py.
+    Entirely separate detector from scan()/scan_pullback(): an N-bar-high/
+    low breakout and a swing-structure break are different lenses on the
+    same price action and routinely disagree on a given symbol/candle.
+    """
+    symbols, _ = _get_universe(min_quote_volume_usd, universe_limit, max_market_cap_usd, _market_caps or {}, market)
+
+    def _fetch(symbol: str):
+        try:
+            return symbol, _fetch_df(symbol, timeframe, market, limit=150), None
+        except Exception as exc:
+            return symbol, None, exc
+
+    hits = []
+    with ThreadPoolExecutor(max_workers=_FETCH_WORKERS) as pool:
+        for symbol, df, exc in pool.map(_fetch, symbols):
+            if exc is not None:
+                continue
+            signal = evaluate_smc_structure(df)
+            if signal is not None:
+                signal.symbol = symbol
+                hits.append(signal)
+
+    longs = sorted((h for h in hits if h.direction == "long"), key=lambda s: s.score, reverse=True)
+    shorts = sorted((h for h in hits if h.direction == "short"), key=lambda s: s.score, reverse=True)
+    return longs[:top_n] + shorts[:top_n]
+
+
+def scan_smc_approaching(
+    timeframe: str = "1h",
+    min_quote_volume_usd: float = 2_000_000,
+    universe_limit: int = 200,
+    top_n: int = 15,
+    max_market_cap_usd: float | None = None,
+    market: str = "crypto",
+    _market_caps: dict[str, dict] | None = None,
+) -> list[ApproachingSMCSignal]:
+    """UNCONFIRMED watchlist tier for smc.py -- price testing/nearing the
+    nearest unbroken swing level, read off the live forming candle. Same
+    "can vanish before the bar closes" caveat as evaluate_approaching.
+    """
+    symbols, _ = _get_universe(min_quote_volume_usd, universe_limit, max_market_cap_usd, _market_caps or {}, market)
+
+    def _fetch(symbol: str):
+        try:
+            return symbol, _fetch_df(symbol, timeframe, market, limit=150), None
+        except Exception as exc:
+            return symbol, None, exc
+
+    hits = []
+    with ThreadPoolExecutor(max_workers=_FETCH_WORKERS) as pool:
+        for symbol, df, exc in pool.map(_fetch, symbols):
+            if exc is not None:
+                continue
+            signal = evaluate_smc_approaching(df)
+            if signal is not None:
+                signal.symbol = symbol
+                hits.append(signal)
+
+    def _sort_key(s):
+        return (s.status != "testing", abs(s.distance_pct))
+
+    longs = sorted((h for h in hits if h.direction == "long"), key=_sort_key)
+    shorts = sorted((h for h in hits if h.direction == "short"), key=_sort_key)
+    return longs[:top_n] + shorts[:top_n]
+
+
+def scan_zone_retest(
+    timeframe: str = "1h",
+    min_quote_volume_usd: float = 2_000_000,
+    universe_limit: int = 200,
+    top_n: int = 15,
+    max_market_cap_usd: float | None = None,
+    market: str = "crypto",
+    _market_caps: dict[str, dict] | None = None,
+) -> list[ZoneRetestSignal]:
+    """Price re-entered a still-active liquidity zone and held it -- see
+    smc.py's evaluate_zone_retest(). Entirely separate detector from
+    scan_smc(): that one fires on a zone BREAKING; this one fires on a
+    zone HOLDING under a retest.
+    """
+    symbols, _ = _get_universe(min_quote_volume_usd, universe_limit, max_market_cap_usd, _market_caps or {}, market)
+
+    def _fetch(symbol: str):
+        try:
+            return symbol, _fetch_df(symbol, timeframe, market, limit=150), None
+        except Exception as exc:
+            return symbol, None, exc
+
+    hits = []
+    with ThreadPoolExecutor(max_workers=_FETCH_WORKERS) as pool:
+        for symbol, df, exc in pool.map(_fetch, symbols):
+            if exc is not None:
+                continue
+            signal = evaluate_zone_retest(df)
+            if signal is not None:
+                signal.symbol = symbol
+                hits.append(signal)
+
+    longs = sorted((h for h in hits if h.direction == "long"), key=lambda s: s.score, reverse=True)
+    shorts = sorted((h for h in hits if h.direction == "short"), key=lambda s: s.score, reverse=True)
+    return longs[:top_n] + shorts[:top_n]
+
+
 def scan_accumulation(
     timeframe: str = "4h",
     min_quote_volume_usd: float = 2_000_000,
@@ -346,6 +468,21 @@ def _print_paper_stats(stats: PaperStats, newly_logged: int, newly_resolved: int
         "accumulate a meaningful sample."
         + ("\n\n" + terms_for("paper") if stats.total else "")
     )
+
+
+def _print_testnet_results(outcomes) -> None:
+    if not outcomes:
+        return
+    print(f"\n{colors.dim('TESTNET AUTO-EXECUTION')} (Binance Futures Testnet -- fake funds, real matching engine)")
+    for r in outcomes:
+        if r.status == "placed":
+            print(
+                f"  {colors.long_label('PLACED') if r.direction == 'long' else colors.short_label('PLACED')} "
+                f"{r.symbol} {r.direction} qty={r.qty:.6g}  entry={r.entry_order_id} "
+                f"stop={r.stop_order_id} tp1={r.tp_order_id}"
+            )
+        else:
+            print(f"  FAILED {r.symbol} {r.direction}: {r.error}")
 
 
 def _print_regime(s: RegimeSignal) -> None:
@@ -514,6 +651,7 @@ def watch(
     paper_trade: bool = False,
     paper_leverage: float = 1.0,
     paper_notional: float = 10.0,
+    testnet_execute: bool = False,
     **scan_kwargs,
 ) -> None:
     """Re-run `scan` every time a new candle closes on `timeframe`, beeping on any hit.
@@ -569,6 +707,11 @@ def watch(
                 )
                 newly_resolved = len(resolve_open_trades())
                 _print_paper_stats(get_stats(market=market, timeframe=timeframe), newly_logged, newly_resolved)
+
+                if testnet_execute and market == "crypto":
+                    _print_testnet_results(execute_signals(
+                        results, timeframe, leverage=paper_leverage, margin_usd=paper_notional,
+                    ))
 
             sys.stdout.flush()
             if results:
@@ -780,6 +923,18 @@ Examples:
         help="Margin (in USD) set aside per new paper trade (default: 10.0). Same locked-in-at-log-time rule as --paper-leverage.",
     )
     parser.add_argument(
+        "--testnet-execute", action="store_true",
+        help=(
+            "ALSO place REAL orders (entry + reduce-only stop + TP1) on Binance Futures TESTNET "
+            "for every newly-logged CONFIRMED signal -- fake funds, a real exchange matching "
+            "engine, so a more honest fill than the paper ledger's exact-price math. Requires "
+            "BINANCE_TESTNET_API_KEY / BINANCE_TESTNET_API_SECRET (create both at "
+            "https://testnet.binancefuture.com/); exits with an error if either is unset. Uses "
+            "--paper-leverage/--paper-notional for sizing. Crypto only -- ignored on --market "
+            "stocks*. Only works with --paper-trade (needs the same signal list)."
+        ),
+    )
+    parser.add_argument(
         "--paper-stats", action="store_true",
         help=(
             "Print current paper-trading stats (from prior --paper-trade runs) and "
@@ -862,6 +1017,14 @@ def main() -> None:
         market=args.market,
     )
 
+    if args.testnet_execute and not credentials_configured():
+        print(
+            "--testnet-execute needs BINANCE_TESTNET_API_KEY and BINANCE_TESTNET_API_SECRET set "
+            "(create both at https://testnet.binancefuture.com/).",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     if args.watch:
         watch(
             approaching=args.approaching,
@@ -872,6 +1035,7 @@ def main() -> None:
             paper_trade=args.paper_trade,
             paper_leverage=args.paper_leverage,
             paper_notional=args.paper_notional,
+            testnet_execute=args.testnet_execute,
             **scan_kwargs,
         )
         return
@@ -901,6 +1065,11 @@ def main() -> None:
         )
         newly_resolved = len(resolve_open_trades())
         _print_paper_stats(get_stats(market=args.market, timeframe=args.timeframe), newly_logged, newly_resolved)
+
+        if args.testnet_execute and args.market == "crypto":
+            _print_testnet_results(execute_signals(
+                results, args.timeframe, leverage=args.paper_leverage, margin_usd=args.paper_notional,
+            ))
 
 
 if __name__ == "__main__":

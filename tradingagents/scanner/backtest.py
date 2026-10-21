@@ -23,9 +23,13 @@ import pandas as pd
 
 from .binance_data import fetch_ohlcv_history_df
 from .breakout import evaluate_breakout, evaluate_pullback
+from .smc import evaluate_smc_structure, evaluate_zone_retest
 from .stock_data import fetch_stock_ohlcv_history_df
 
-_STRATEGIES = {"breakout": evaluate_breakout, "pullback": evaluate_pullback}
+_STRATEGIES = {
+    "breakout": evaluate_breakout, "pullback": evaluate_pullback,
+    "smc": evaluate_smc_structure, "zone_retest": evaluate_zone_retest,
+}
 
 # Below this many bars, neither detector has enough history to fire anyway
 # (they self-guard on length); just a cheap floor to skip pointless calls.
@@ -164,7 +168,12 @@ def run_backtest(
             k += 1
             continue
 
-        target = signal.take_profits[0] if strategy == "breakout" else signal.targets[0]
+        if strategy == "breakout":
+            target = signal.take_profits[0]
+        elif strategy == "pullback":
+            target = signal.targets[0]
+        else:
+            target = signal.target  # "smc" or "zone_retest"
         entry = signal.close
         if not is_valid_setup(signal.direction, entry, signal.stop_loss, target):
             k += 1

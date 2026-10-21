@@ -18,9 +18,42 @@ from .breakout import (
 from .glossary import full_glossary_text, terms_for
 from .gold_smc import GoldSMCSignal, analyze_htf, evaluate_gold_smc
 from .news import NewsItem, fetch_crypto_news, fetch_stock_news
-from .paper_trading import PaperStats, PaperTrade, get_stats, get_trades, record_signal, resolve_open_trades
+from .paper_trading import (
+    DailyPnL,
+    PaperStats,
+    PaperTrade,
+    get_daily_pnl,
+    get_stats,
+    get_trades,
+    record_signal,
+    resolve_open_trades,
+)
 from .regime import RegimeSignal, evaluate_market_regime
+from .smc import (
+    ApproachingSMCSignal,
+    SMCSignal,
+    ZoneRetestSignal,
+    evaluate_smc_approaching,
+    evaluate_smc_structure,
+    evaluate_zone_retest,
+)
+from .propr_exec import (
+    ProprStats,
+    credentials_configured as propr_credentials_configured,
+    execute_signals as execute_propr_signals,
+    get_propr_orders,
+    get_propr_stats,
+    resolve_propr_orders,
+)
 from .stock_data import fetch_stock_ohlcv_df, fetch_stock_ohlcv_history_df, get_real_stock_universe
+from .testnet_exec import (
+    TestnetStats,
+    credentials_configured,
+    execute_signals,
+    get_testnet_orders,
+    get_testnet_stats,
+    resolve_testnet_orders,
+)
 from .scan import (
     GOLD_SYMBOL,
     scan,
@@ -29,6 +62,9 @@ from .scan import (
     scan_gold_smc,
     scan_pullback,
     scan_regime,
+    scan_smc,
+    scan_smc_approaching,
+    scan_zone_retest,
     watch,
     watch_gold_smc,
 )
@@ -36,9 +72,19 @@ from .scan import (
 __all__ = [
     "AccumulationSignal",
     "ApproachingSignal",
+    "ApproachingSMCSignal",
+    "SMCSignal",
+    "ZoneRetestSignal",
+    "evaluate_smc_approaching",
+    "evaluate_smc_structure",
+    "evaluate_zone_retest",
+    "scan_smc",
+    "scan_smc_approaching",
+    "scan_zone_retest",
     "BacktestSummary",
     "BacktestTrade",
     "BreakoutSignal",
+    "DailyPnL",
     "GOLD_SYMBOL",
     "GoldSMCSignal",
     "NewsItem",
@@ -46,11 +92,13 @@ __all__ = [
     "PaperTrade",
     "PullbackSignal",
     "analyze_htf",
+    "credentials_configured",
     "evaluate_accumulation",
     "evaluate_approaching",
     "evaluate_breakout",
     "evaluate_gold_smc",
     "evaluate_pullback",
+    "execute_signals",
     "fetch_crypto_news",
     "fetch_ohlcv_df",
     "fetch_ohlcv_history_df",
@@ -58,9 +106,20 @@ __all__ = [
     "fetch_stock_ohlcv_df",
     "fetch_stock_ohlcv_history_df",
     "full_glossary_text",
+    "get_daily_pnl",
     "get_liquid_perp_universe",
     "get_real_stock_universe",
     "get_stats",
+    "get_testnet_orders",
+    "get_testnet_stats",
+    "TestnetStats",
+    "resolve_testnet_orders",
+    "propr_credentials_configured",
+    "execute_propr_signals",
+    "get_propr_orders",
+    "get_propr_stats",
+    "ProprStats",
+    "resolve_propr_orders",
     "get_trades",
     "get_tradfi_perp_universe",
     "record_signal",
