@@ -35,6 +35,7 @@ from textual.widgets import (
     TabbedContent,
     TabPane,
 )
+from textual_plotext import PlotextPlot
 from tradingagents.scanner import (
     credentials_configured,
     evaluate_market_regime,
@@ -43,8 +44,10 @@ from tradingagents.scanner import (
     fetch_crypto_news,
     fetch_stock_news,
     get_daily_pnl,
+    get_equity_curve,
     get_propr_orders,
     get_propr_stats,
+    get_regime_breakdown,
     get_stats,
     get_testnet_orders,
     get_testnet_stats,
@@ -725,6 +728,7 @@ class ScannerApp(App):
         self._paper_notional = _settings["paper_notional"]
         self._testnet_enabled = _settings["testnet_enabled"] and credentials_configured()
         self._propr_enabled = _settings["propr_enabled"] and propr_credentials_configured()
+        self._last_regime = None  # most recent RegimeSignal from _run_regime, snapshotted onto every logged trade
         _saved_auto_tabs = _settings.get("auto_refresh_tabs")
         _all_tab_ids = {tab_id for tab_id, _ in AUTO_REFRESH_TABS}
         if _saved_auto_tabs is None:
@@ -905,6 +909,16 @@ class ScannerApp(App):
                     classes="panel-subtitle",
                 )
                 yield DataTable(id="table-propr", zebra_stripes=True)
+            with TabPane("Stats", id="tab-stats"):
+                yield Label(
+                    "Cross-ledger view: regime breakdown (is this system's edge dependent on a bullish/"
+                    "neutral/bearish tape) and the cumulative $PnL curve for each ledger, in the order "
+                    "trades actually closed. 'unknown' regime rows are trades logged before this tracking "
+                    "existed -- expected, not a bug. Recomputed fresh every time you open this tab.",
+                    classes="panel-subtitle",
+                )
+                yield DataTable(id="table-stats-regime", zebra_stripes=True)
+                yield PlotextPlot(id="stats-equity-plot")
             with TabPane("Favorites", id="tab-favorites"):
                 yield Label("FAVORITES", classes="panel-title")
                 yield Label(
@@ -956,6 +970,7 @@ class ScannerApp(App):
                 "Symbol", "Base", "TF", "Dir", "Qty", "Lev", "Status", "Entry", "Stop", "TP", "Exit",
                 "R", "$PnL", "Created",
             ],
+            "table-stats-regime": ["Ledger", "Regime", "N", "Wins", "Losses", "Win Rate", "Total R", "Total $PnL"],
             "table-favorites": ["Symbol", "Market", "Added"],
         }
 
@@ -1077,7 +1092,7 @@ class ScannerApp(App):
         # Tabs/TabPane ids differ by a "--content-tab-" prefix internally; match by suffix.
         known_tabs = (
             "tab-confirmed", "tab-approaching", "tab-pullback", "tab-accumulation", "tab-structure",
-            "tab-backtest", "tab-news", "tab-paper", "tab-testnet", "tab-propr", "tab-favorites",
+            "tab-backtest", "tab-news", "tab-paper", "tab-testnet", "tab-propr", "tab-stats", "tab-favorites",
         )
         for known in known_tabs:
             if known in tab_id:
@@ -1093,6 +1108,8 @@ class ScannerApp(App):
                 elif known == "tab-propr":
                     if "tab-propr" not in self._loaded:
                         self._open_propr_tab()
+                elif known == "tab-stats":
+                    self._open_stats_tab()  # cheap local SQLite reads -- always recompute, no _loaded gate
                 elif known in ("tab-favorites", "tab-backtest"):
                     pass  # favorites is static local data; backtest only runs on Run Backtest
                 elif known not in self._loaded:
@@ -1587,6 +1604,8 @@ class ScannerApp(App):
     def _log_paper_trades(self, results) -> None:
         from datetime import timezone
 
+        regime_label = self._last_regime.label if self._last_regime else None
+        regime_score = self._last_regime.score if self._last_regime else None
         for s in results:
             if s.entry_time is None:
                 continue
@@ -1597,6 +1616,7 @@ class ScannerApp(App):
                 direction=s.direction, entry_time=entry_time, entry_price=s.close, stop_loss=s.stop_loss,
                 target1=tps[0], target2=tps[1] if len(tps) > 1 else None, target3=tps[2] if len(tps) > 2 else None,
                 leverage=self._paper_leverage, notional_usd=self._paper_notional, score=s.score, reason=s.reason,
+                regime_label=regime_label, regime_score=regime_score,
             )
 
         if self._testnet_enabled and self._market == "crypto" and results:
@@ -1619,9 +1639,12 @@ class ScannerApp(App):
         from the main thread."""
         if not results:
             return
+        regime_label = self._last_regime.label if self._last_regime else None
+        regime_score = self._last_regime.score if self._last_regime else None
         try:
             outcomes = execute_propr_signals(
                 results, self._timeframe, leverage=self._paper_leverage, margin_usd=self._paper_notional,
+                regime_label=regime_label, regime_score=regime_score,
             )
         except Exception as exc:
             self.call_from_thread(self.notify, f"Propr dry-run error: {exc}", severity="error", timeout=6)
@@ -1630,6 +1653,7 @@ class ScannerApp(App):
             return
         logged = [o for o in outcomes if o.status == "dry_run"]
         skipped = [o for o in outcomes if o.status == "skipped_untradable"]
+        invalid = [o for o in outcomes if o.status == "skipped_invalid_setup"]
         if logged:
             symbols = ", ".join(f"{o.symbol} {o.direction}" for o in logged)
             self.call_from_thread(self.notify, f"Propr dry-run: logged {len(logged)} order(s) -- {symbols}", timeout=6)
@@ -1638,12 +1662,22 @@ class ScannerApp(App):
                 self.notify, f"Propr: {len(skipped)} signal(s) not tradable on Hyperliquid, skipped",
                 timeout=5,
             )
+        if invalid:
+            self.call_from_thread(
+                self.notify,
+                f"Propr: {len(invalid)} signal(s) had TP1 on the wrong side of entry (strong-candle "
+                "edge case), skipped rather than logged as a nonsense trade",
+                timeout=6,
+            )
 
     @work(thread=True, exclusive=True, group="testnet")
     def _run_testnet_execute(self, results) -> None:
+        regime_label = self._last_regime.label if self._last_regime else None
+        regime_score = self._last_regime.score if self._last_regime else None
         try:
             outcomes = execute_signals(
                 results, self._timeframe, leverage=self._paper_leverage, margin_usd=self._paper_notional,
+                regime_label=regime_label, regime_score=regime_score,
             )
         except Exception as exc:
             self.call_from_thread(self.notify, f"Testnet execution error: {exc}", severity="error", timeout=6)
@@ -1854,6 +1888,60 @@ class ScannerApp(App):
             )
         self._scan_done("tab-propr", len(orders))
 
+    # ---- stats: cross-ledger regime breakdown + equity curves, all local
+    # SQLite reads (no network), recomputed fresh every time the tab opens ----
+
+    def _open_stats_tab(self) -> None:
+        self._set_status("Computing stats...", scanning=True)
+        self._run_stats()
+
+    @work(thread=True, exclusive=True, group="stats")
+    def _run_stats(self) -> None:
+        try:
+            breakdown = get_regime_breakdown()
+            curves = {ledger: get_equity_curve(ledger) for ledger in ("paper", "testnet", "propr")}
+        except Exception as exc:
+            self.call_from_thread(self._scan_failed, "tab-stats", str(exc))
+            return
+        self.call_from_thread(self._fill_stats_tab, breakdown, curves)
+
+    def _fill_stats_tab(self, breakdown: dict, curves: dict) -> None:
+        table = self.query_one("#table-stats-regime", DataTable)
+        self._clear_table(table)
+        row_count = 0
+        for ledger in ("paper", "testnet", "propr"):
+            for b in breakdown.get(ledger, []):
+                resolved = b.wins + b.losses
+                wr_style = _DIM_STYLE
+                if resolved > 0:
+                    wr_style = _LONG_STYLE if b.win_rate >= 50 else _SHORT_STYLE
+                pnl_style = _LONG_STYLE if b.total_pnl_usd > 0 else (_SHORT_STYLE if b.total_pnl_usd < 0 else _DIM_STYLE)
+                table.add_row(
+                    ledger.capitalize(), b.label.capitalize(), str(b.n), str(b.wins), str(b.losses),
+                    Text(f"{b.win_rate:.1f}%", style=wr_style), f"{b.total_r:+.2f}",
+                    Text(f"{b.total_pnl_usd:+.2f}", style=pnl_style),
+                    key=f"{ledger}-{b.label}",
+                )
+                row_count += 1
+
+        plot = self.query_one("#stats-equity-plot", PlotextPlot)
+        plot.plt.clear_data()
+        plot.plt.clear_figure()
+        plot.plt.title("Cumulative $PnL by trade sequence (closed trades, chronological)")
+        plot.plt.xlabel("Closed trade #")
+        plot.plt.ylabel("$PnL")
+        colors = {"paper": "green", "testnet": "cyan", "propr": "magenta"}
+        any_curve = False
+        for ledger, curve in curves.items():
+            if len(curve) < 2:
+                continue  # plotext needs at least 2 points to draw a line
+            any_curve = True
+            plot.plt.plot(list(range(1, len(curve) + 1)), curve, label=ledger.capitalize(), color=colors[ledger])
+        if not any_curve:
+            plot.plt.text("Not enough closed trades yet to plot", x=0, y=0)
+        plot.refresh()
+        self._scan_done("tab-stats", row_count)
+
     @work(thread=True, exclusive=True, group="regime")
     def _run_regime(self) -> None:
         try:
@@ -1870,6 +1958,7 @@ class ScannerApp(App):
             banner.set_class(False, "bullish")
             banner.set_class(False, "bearish")
             return
+        self._last_regime = signal  # snapshotted onto every trade logged from now until the next 15-min refresh
         banner.set_class(signal.label == "bullish", "bullish")
         banner.set_class(signal.label == "bearish", "bearish")
         banner.update(

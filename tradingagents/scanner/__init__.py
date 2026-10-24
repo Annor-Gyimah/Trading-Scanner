@@ -45,6 +45,7 @@ from .propr_exec import (
     get_propr_stats,
     resolve_propr_orders,
 )
+from .stats_analytics import RegimeBucket, get_equity_curve, get_regime_breakdown
 from .stock_data import fetch_stock_ohlcv_df, fetch_stock_ohlcv_history_df, get_real_stock_universe
 from .testnet_exec import (
     TestnetStats,
@@ -125,6 +126,9 @@ __all__ = [
     "record_signal",
     "resolve_open_trades",
     "RegimeSignal",
+    "RegimeBucket",
+    "get_equity_curve",
+    "get_regime_breakdown",
     "evaluate_market_regime",
     "run_backtest",
     "scan",

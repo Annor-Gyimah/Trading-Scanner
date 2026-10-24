@@ -49,6 +49,8 @@ _NEW_COLUMNS = [
     ("notional_usd", "REAL NOT NULL DEFAULT 10.0"),
     ("pnl_usd", "REAL"),
     ("leverage", "REAL NOT NULL DEFAULT 1.0"),
+    ("regime_label", "TEXT"),
+    ("regime_score", "REAL"),
 ]
 
 
@@ -143,6 +145,8 @@ class PaperTrade:
     notional_usd: float  # margin per trade, in dollars
     leverage: float  # locked in at entry; changing the app-wide default later never touches this trade
     pnl_usd: float | None
+    regime_label: str | None  # market-regime snapshot (regime.py) at the moment this was logged
+    regime_score: float | None
 
     @property
     def targets(self) -> list[float]:
@@ -157,14 +161,14 @@ class PaperTrade:
 _SELECT_COLUMNS = (
     "id, symbol, market, timeframe, tier, direction, entry_time, entry_price, stop_loss, target, "
     "score, reason, status, exit_time, exit_price, exit_reason, r_multiple, pnl_pct, "
-    "target2, target3, best_level, closed, notional_usd, pnl_usd, leverage"
+    "target2, target3, best_level, closed, notional_usd, pnl_usd, leverage, regime_label, regime_score"
 )
 
 
 def _row_to_trade(row: tuple) -> PaperTrade:
     (id_, symbol, market, timeframe, tier, direction, entry_time, entry_price, stop_loss, target,
      score, reason, status, exit_time, exit_price, exit_reason, r_multiple, pnl_pct,
-     target2, target3, best_level, closed, notional_usd, pnl_usd, leverage) = row
+     target2, target3, best_level, closed, notional_usd, pnl_usd, leverage, regime_label, regime_score) = row
     return PaperTrade(
         id=id_, symbol=symbol, market=market, timeframe=timeframe, tier=tier, direction=direction,
         entry_time=datetime.fromisoformat(entry_time), entry_price=entry_price, stop_loss=stop_loss,
@@ -174,6 +178,7 @@ def _row_to_trade(row: tuple) -> PaperTrade:
         exit_price=exit_price, exit_reason=exit_reason, r_multiple=r_multiple, pnl_pct=pnl_pct,
         notional_usd=notional_usd if notional_usd is not None else 10.0,
         leverage=leverage if leverage is not None else 1.0, pnl_usd=pnl_usd,
+        regime_label=regime_label, regime_score=regime_score,
     )
 
 
@@ -183,6 +188,7 @@ def record_signal(
     target1: float, target2: float | None = None, target3: float | None = None,
     score: float | None = None, reason: str | None = None,
     notional_usd: float = 10.0, leverage: float = 1.0,
+    regime_label: str | None = None, regime_score: float | None = None,
 ) -> bool:
     """Log one live signal as a new open paper trade. Returns False (no-op)
     if this exact signal (same symbol/market/timeframe/direction/entry_time)
@@ -193,6 +199,11 @@ def record_signal(
     re-read from any later "current setting," so changing the app-wide
     default afterward only affects trades logged from then on, never
     retroactively changes one already in the ledger.
+
+    `regime_label`/`regime_score` are the market-regime snapshot (see
+    regime.py) at the moment this signal was logged -- purely informational,
+    stored so later analysis can tell whether this system's edge depends on
+    the prevailing regime (bullish/neutral/bearish tape).
     """
     if not is_valid_setup(direction, entry_price, stop_loss, target1):
         return False
@@ -201,10 +212,12 @@ def record_signal(
             conn.execute(
                 """INSERT INTO trades
                    (symbol, market, timeframe, tier, direction, entry_time, entry_price,
-                    stop_loss, target, target2, target3, score, reason, notional_usd, leverage)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    stop_loss, target, target2, target3, score, reason, notional_usd, leverage,
+                    regime_label, regime_score)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (symbol, market, timeframe, tier, direction, entry_time.isoformat(),
-                 entry_price, stop_loss, target1, target2, target3, score, reason, notional_usd, leverage),
+                 entry_price, stop_loss, target1, target2, target3, score, reason, notional_usd, leverage,
+                 regime_label, regime_score),
             )
             conn.commit()
             return True

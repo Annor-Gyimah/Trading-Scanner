@@ -41,6 +41,7 @@ from pathlib import Path
 
 import requests
 
+from .backtest import is_valid_setup
 from .breakout import BreakoutSignal
 
 DB_PATH = Path(os.environ.get("TRADINGAGENTS_PAPER_DB", str(Path.home() / ".tradingagents" / "paper_trades.db")))
@@ -141,6 +142,8 @@ _NEW_COLUMNS = [
     ("closed_at", "TEXT"),
     ("r_multiple", "REAL"),
     ("pnl_usd", "REAL"),
+    ("regime_label", "TEXT"),
+    ("regime_score", "REAL"),
 ]
 
 
@@ -194,22 +197,40 @@ def _init_schema(conn: sqlite3.Connection) -> None:
 
 _SELECT_COLUMNS = (
     "id, symbol, base, timeframe, direction, entry_time, qty, leverage, entry_price, stop_price, "
-    "tp_price, status, error, created_at, exit_price, exit_reason, closed_at, r_multiple, pnl_usd"
+    "tp_price, status, error, created_at, exit_price, exit_reason, closed_at, r_multiple, pnl_usd, "
+    "regime_label, regime_score"
 )
 _COLUMN_NAMES = [c.strip() for c in _SELECT_COLUMNS.split(",")]
 
 
 def execute_signal(
     signal: BreakoutSignal, timeframe: str, leverage: float = 1.0, margin_usd: float = 10.0,
+    regime_label: str | None = None, regime_score: float | None = None,
 ) -> ProprExecutionResult:
     """Build the exact order this Confirmed signal WOULD place on Propr,
     log it with status='dry_run', and return -- never calls the real
-    orders endpoint. See module docstring."""
+    orders endpoint. See module docstring.
+
+    Rejects (status="skipped_invalid_setup") a signal whose own TP1 isn't on
+    the correct side of entry -- same is_valid_setup check paper_trading.py
+    already applies. TP1 is derived from the structural breakout level, not
+    from entry price, so a strong momentum candle can occasionally put TP1
+    behind where this would actually enter; without this guard that logs as
+    an immediate "TP hit" that's actually a loss.
+
+    `regime_label`/`regime_score` are the market-regime snapshot (see
+    regime.py) at the moment this signal was logged -- purely informational.
+    """
     base = resolve_tradable_base(signal.symbol)
     if base is None:
         return ProprExecutionResult(
             symbol=signal.symbol, base=None, direction=signal.direction, status="skipped_untradable",
             error=f"{signal.symbol} is not tradable on Hyperliquid (Propr's execution venue)",
+        )
+    if not is_valid_setup(signal.direction, signal.close, signal.stop_loss, signal.take_profits[0]):
+        return ProprExecutionResult(
+            symbol=signal.symbol, base=base, direction=signal.direction, status="skipped_invalid_setup",
+            error="TP1 is on the wrong side of entry (strong-candle edge case) -- not a tradeable setup",
         )
 
     try:
@@ -233,11 +254,12 @@ def execute_signal(
             conn.execute(
                 """INSERT INTO propr_orders
                    (symbol, base, timeframe, direction, entry_time, qty, leverage, entry_price,
-                    stop_price, tp_price, status, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'dry_run', ?)""",
+                    stop_price, tp_price, status, created_at, regime_label, regime_score)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'dry_run', ?, ?, ?)""",
                 (
                     signal.symbol, base, timeframe, signal.direction, entry_time.isoformat(),
                     round(qty, 6), effective_leverage, signal.close, stop_price, tp_price, now,
+                    regime_label, regime_score,
                 ),
             )
             conn.commit()
@@ -253,8 +275,12 @@ def execute_signal(
 
 def execute_signals(
     signals: list[BreakoutSignal], timeframe: str, leverage: float = 1.0, margin_usd: float = 10.0,
+    regime_label: str | None = None, regime_score: float | None = None,
 ) -> list[ProprExecutionResult]:
-    return [execute_signal(s, timeframe, leverage, margin_usd) for s in signals]
+    return [
+        execute_signal(s, timeframe, leverage, margin_usd, regime_label=regime_label, regime_score=regime_score)
+        for s in signals
+    ]
 
 
 def get_propr_orders(limit: int = 200) -> list[dict]:

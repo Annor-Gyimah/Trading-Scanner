@@ -36,6 +36,7 @@ from pathlib import Path
 
 import ccxt
 
+from .backtest import is_valid_setup
 from .breakout import BreakoutSignal
 
 DB_PATH = Path(os.environ.get("TRADINGAGENTS_PAPER_DB", str(Path.home() / ".tradingagents" / "paper_trades.db")))
@@ -51,6 +52,8 @@ _NEW_COLUMNS = [
     ("closed_at", "TEXT"),
     ("r_multiple", "REAL"),
     ("pnl_usd", "REAL"),
+    ("regime_label", "TEXT"),
+    ("regime_score", "REAL"),
 ]
 
 
@@ -151,6 +154,7 @@ class ExecutionResult:
 
 def execute_signal(
     signal: BreakoutSignal, timeframe: str, leverage: float = 1.0, margin_usd: float = 10.0,
+    regime_label: str | None = None, regime_score: float | None = None,
 ) -> ExecutionResult:
     """Place a real (testnet) market entry plus reduce-only stop-loss and
     TP1 take-profit for one CONFIRMED signal. Single target (TP1), same
@@ -160,9 +164,25 @@ def execute_signal(
     Deduplicates the same way record_signal does (symbol/timeframe/
     direction/entry_time) -- safe to call every scan cycle on the same
     results list without double-placing an order for a signal already seen.
+
+    Rejects (status="skipped") a signal whose own TP1 isn't on the correct
+    side of entry -- same is_valid_setup check paper_trading.py already
+    applies, added here because TP1 is derived from the structural breakout
+    level, not from entry price, so a strong momentum candle can occasionally
+    put TP1 behind where this would actually enter.
+
+    `regime_label`/`regime_score` are the market-regime snapshot (see
+    regime.py) at the moment this signal was logged -- purely informational,
+    stored so later analysis can tell whether this system's edge depends on
+    the prevailing regime.
     """
     if signal.entry_time is None:
         return ExecutionResult(signal.symbol, signal.direction, "skipped", error="signal has no entry_time")
+    if not is_valid_setup(signal.direction, signal.close, signal.stop_loss, signal.take_profits[0]):
+        return ExecutionResult(
+            signal.symbol, signal.direction, "skipped",
+            error="TP1 is on the wrong side of entry (strong-candle edge case) -- not a tradeable setup",
+        )
     entry_time_iso = signal.entry_time.to_pydatetime().replace(tzinfo=timezone.utc).isoformat()
 
     with closing(_connect()) as conn:
@@ -170,10 +190,11 @@ def execute_signal(
             conn.execute(
                 """INSERT INTO testnet_orders
                    (symbol, timeframe, direction, entry_time, leverage, margin_usd, created_at,
-                    entry_price, stop_price, tp_price)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    entry_price, stop_price, tp_price, regime_label, regime_score)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (signal.symbol, timeframe, signal.direction, entry_time_iso, leverage, margin_usd,
-                 datetime.now(timezone.utc).isoformat(), signal.close, signal.stop_loss, signal.take_profits[0]),
+                 datetime.now(timezone.utc).isoformat(), signal.close, signal.stop_loss, signal.take_profits[0],
+                 regime_label, regime_score),
             )
             conn.commit()
         except sqlite3.IntegrityError:
@@ -230,15 +251,19 @@ def execute_signal(
 
 def execute_signals(
     results: list[BreakoutSignal], timeframe: str, leverage: float = 1.0, margin_usd: float = 10.0,
+    regime_label: str | None = None, regime_score: float | None = None,
 ) -> list[ExecutionResult]:
     """Run execute_signal over every result, skipping anything already
     executed. Returns only the outcomes for signals this call actually
     touched (placed or newly failed) -- repeats of an already-seen signal
-    come back as "skipped" but are filtered out of the returned list so
-    callers only see what's new."""
+    (or a signal with an unusable TP1) come back as "skipped" but are
+    filtered out of the returned list so callers only see what's new."""
     out = []
     for s in results:
-        result = execute_signal(s, timeframe, leverage=leverage, margin_usd=margin_usd)
+        result = execute_signal(
+            s, timeframe, leverage=leverage, margin_usd=margin_usd,
+            regime_label=regime_label, regime_score=regime_score,
+        )
         if result.status != "skipped":
             out.append(result)
     return out
@@ -247,7 +272,7 @@ def execute_signals(
 _SELECT_COLUMNS = (
     "symbol, timeframe, direction, entry_time, qty, leverage, margin_usd, entry_order_id, "
     "stop_order_id, tp_order_id, status, error, created_at, entry_price, stop_price, tp_price, "
-    "exit_price, exit_reason, closed_at, r_multiple, pnl_usd"
+    "exit_price, exit_reason, closed_at, r_multiple, pnl_usd, regime_label, regime_score"
 )
 _COLUMN_NAMES = [c.strip() for c in _SELECT_COLUMNS.split(",")]
 
